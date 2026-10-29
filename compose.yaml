@@ -1,0 +1,7 @@
+﻿services:
+  funkoappi01:
+    image: funkoappi01
+    build:
+      context: .
+      dockerfile: FunkoAppi01/Dockerfile
+

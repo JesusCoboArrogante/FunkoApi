@@ -1,0 +1,21 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FunkoAppi01", "FunkoAppi01\FunkoAppi01.csproj", "{6176ACB8-4E01-4F0F-83C4-2AF8D1950DD5}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{C5EDDFB4-3A20-4EBB-ADA9-09E1441F6B92}"
+	ProjectSection(SolutionItems) = preProject
+		compose.yaml = compose.yaml
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6176ACB8-4E01-4F0F-83C4-2AF8D1950DD5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6176ACB8-4E01-4F0F-83C4-2AF8D1950DD5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6176ACB8-4E01-4F0F-83C4-2AF8D1950DD5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6176ACB8-4E01-4F0F-83C4-2AF8D1950DD5}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
