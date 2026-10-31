@@ -1,23 +1,45 @@
 using FluentAssertions;
+using FunkoAppi01.Entity;
 using FunkoAppi01.Models;
 using FunkoAppi01.Repository;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 
 namespace FunkoApp.Test.Repository;
 
 /// <summary>
-/// Tests de RepositoryFunko. En memoria: no hace falta TestContainers hasta que la
-/// persistencia pase a EF Core (fase 9 de la práctica).
+/// Tests de RepositoryFunko contra una base SQLite real en memoria (no mockeada).
+/// TestContainers queda para cuando se añada PostgreSQL; SQLite no necesita Docker.
 /// </summary>
 [TestFixture]
 public class RepositoryFunkoTests
 {
+    private SqliteConnection _connection = null!;
+    private AppDbContext _context = null!;
     private RepositoryFunko _repository = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _repository = new RepositoryFunko();
+        _connection = new SqliteConnection("DataSource=:memory:");
+        _connection.Open();
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        _context = new AppDbContext(options);
+        _context.Database.EnsureCreated();
+
+        _repository = new RepositoryFunko(_context);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _context.Dispose();
+        _connection.Dispose();
     }
 
     private static Funko CrearFunko(string nombre = "Pikachu") => new()
@@ -32,10 +54,10 @@ public class RepositoryFunkoTests
     public class CasosPositivos : RepositoryFunkoTests
     {
         [Test]
-        public void Add_DeberiaAsignarIdYFechaDeCreacion()
+        public async Task AddAsync_DeberiaAsignarIdYFechaDeCreacion()
         {
             // Act
-            var creado = _repository.Add(CrearFunko());
+            var creado = await _repository.AddAsync(CrearFunko());
 
             // Assert
             creado.Id.Should().BeGreaterThan(0);
@@ -43,28 +65,39 @@ public class RepositoryFunkoTests
         }
 
         [Test]
-        public void GetAll_SoloDeberiaDevolverLosNoBorrados()
+        public async Task AddAsync_DosFunkosConLaMismaCategoria_DeberianCompartirLaFilaDeCategoria()
+        {
+            // Act
+            await _repository.AddAsync(CrearFunko("Pikachu"));
+            await _repository.AddAsync(CrearFunko("Charmander"));
+
+            // Assert
+            (await _context.Categorias.CountAsync()).Should().Be(1);
+        }
+
+        [Test]
+        public async Task GetAllAsync_SoloDeberiaDevolverLosNoBorrados()
         {
             // Arrange
-            var activo = _repository.Add(CrearFunko("Pikachu"));
-            var borrado = _repository.Add(CrearFunko("Charmander"));
-            _repository.SoftDelete(borrado.Id);
+            var activo = await _repository.AddAsync(CrearFunko("Pikachu"));
+            var borrado = await _repository.AddAsync(CrearFunko("Charmander"));
+            await _repository.SoftDeleteAsync(borrado.Id);
 
             // Act
-            var resultado = _repository.GetAll();
+            var resultado = await _repository.GetAllAsync();
 
             // Assert
             resultado.Should().ContainSingle(f => f.Id == activo.Id);
         }
 
         [Test]
-        public void ExistsByName_ExcluyendoSuPropioId_DeberiaIgnorarseAsiMismo()
+        public async Task ExistsByNameAsync_ExcluyendoSuPropioId_DeberiaIgnorarseAsiMismo()
         {
             // Arrange
-            var funko = _repository.Add(CrearFunko("Pikachu"));
+            var funko = await _repository.AddAsync(CrearFunko("Pikachu"));
 
             // Act
-            var existe = _repository.ExistsByName("Pikachu", excludeId: funko.Id);
+            var existe = await _repository.ExistsByNameAsync("Pikachu", excludeId: funko.Id);
 
             // Assert
             existe.Should().BeFalse();
@@ -75,47 +108,47 @@ public class RepositoryFunkoTests
     public class CasosNegativos : RepositoryFunkoTests
     {
         [Test]
-        public void GetById_FunkoBorrado_DeberiaDevolverNull()
+        public async Task GetByIdAsync_FunkoBorrado_DeberiaDevolverNull()
         {
             // Arrange
-            var creado = _repository.Add(CrearFunko());
-            _repository.SoftDelete(creado.Id);
+            var creado = await _repository.AddAsync(CrearFunko());
+            await _repository.SoftDeleteAsync(creado.Id);
 
             // Act
-            var resultado = _repository.GetById(creado.Id);
+            var resultado = await _repository.GetByIdAsync(creado.Id);
 
             // Assert
             resultado.Should().BeNull();
         }
 
         [Test]
-        public void SoftDelete_IdInexistente_DeberiaDevolverFalse()
+        public async Task SoftDeleteAsync_IdInexistente_DeberiaDevolverFalse()
         {
             // Act
-            var resultado = _repository.SoftDelete(999);
+            var resultado = await _repository.SoftDeleteAsync(999);
 
             // Assert
             resultado.Should().BeFalse();
         }
 
         [Test]
-        public void Update_IdInexistente_DeberiaDevolverNull()
+        public async Task UpdateAsync_IdInexistente_DeberiaDevolverNull()
         {
             // Act
-            var resultado = _repository.Update(999, CrearFunko());
+            var resultado = await _repository.UpdateAsync(999, CrearFunko());
 
             // Assert
             resultado.Should().BeNull();
         }
 
         [Test]
-        public void ExistsByName_OtroFunkoActivoConEseNombre_DeberiaDevolverTrue()
+        public async Task ExistsByNameAsync_OtroFunkoActivoConEseNombre_DeberiaDevolverTrue()
         {
             // Arrange
-            _repository.Add(CrearFunko("Pikachu"));
+            await _repository.AddAsync(CrearFunko("Pikachu"));
 
             // Act
-            var existe = _repository.ExistsByName("Pikachu");
+            var existe = await _repository.ExistsByNameAsync("Pikachu");
 
             // Assert
             existe.Should().BeTrue();
