@@ -12,6 +12,5 @@ public interface IRepositoryFunko
 
     Funko? UpdatePrecio(long id, decimal precio);
     IReadOnlyList<Funko> GetByName(string? nombre);
-
-
+    bool ExistsByName(string nombre, long? excludeId = null);
 }

@@ -79,6 +79,9 @@ public class RepositoryFunko: IRepositoryFunko
             .ToList();
     }
 
+    public bool ExistsByName(string nombre, long? excludeId = null) =>
+        Activos().Any(p => p.Id != excludeId && p.Nombre.Equals(nombre, StringComparison.OrdinalIgnoreCase));
+
     private List<Funko> Activos() => [.. _funkos.Values.Where(p => !p.IsDeleted)];
     private  Funko? TryGet(long id) => _funkos.TryGetValue(id, out Funko? funko) && !funko.IsDeleted ? funko : null;
 }

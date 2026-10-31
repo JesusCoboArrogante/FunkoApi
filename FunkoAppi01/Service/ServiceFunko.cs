@@ -1,45 +1,76 @@
-﻿using FunkoAppi01.Models;
+﻿using CSharpFunctionalExtensions;
+using FunkoAppi01.Dto;
+using FunkoAppi01.Errors;
+using FunkoAppi01.Mappers;
 using FunkoAppi01.Repository;
+using FunkoAppi01.Validators;
 
 namespace FunkoAppi01.Service;
 
-public class ServiceFunko(IRepositoryFunko repository) : IServiceFunko
+/// <summary>
+/// Orquesta las reglas de negocio de Funko entre el validador y el repositorio.
+/// </summary>
+public class ServiceFunko(IRepositoryFunko repository, IFunkoValidator validator) : IServiceFunko
 {
-    public IEnumerable<Funko> GetAll() => repository.GetAll();
+    public IEnumerable<FunkoDto> GetAll() =>
+        repository.GetAll().Select(f => f.ToDto());
 
-    public Funko? GetById(long id) => repository.GetById(id);
-
-    public Funko Add(Funko funko)
+    public Result<FunkoDto, DomainError> GetById(long id)
     {
-        if (string.IsNullOrWhiteSpace(funko.Nombre))
-            throw new ArgumentException("El nombre es obligatorio");
+        if (repository.GetById(id) is not { } funko)
+            return Result.Failure<FunkoDto, DomainError>(FunkoErrors.NotFound(id));
 
-        if (funko.Precio < 0)
-            throw new ArgumentException("El precio no puede ser negativo");
-        
-        return repository.Add(funko);
+        return Result.Success<FunkoDto, DomainError>(funko.ToDto());
     }
 
-    public Funko? Update(long id, Funko funko)
+    public Result<FunkoDto, DomainError> Add(CreateFunkoDto request)
     {
-        if (string.IsNullOrWhiteSpace(funko.Nombre))
-            throw new ArgumentException("El nombre es obligatorio");
+        var validacion = validator.ValidateCreate(request);
+        if (validacion.IsFailure)
+            return Result.Failure<FunkoDto, DomainError>(validacion.Error);
 
-        if (funko.Precio < 0)
-            throw new ArgumentException("El precio no puede ser negativo");
-        
-        return repository.Update(id, funko);
+        if (repository.ExistsByName(request.Nombre))
+            return Result.Failure<FunkoDto, DomainError>(FunkoErrors.AlreadyExists(request.Nombre));
+
+        var creado = repository.Add(request.ToFunko());
+        return Result.Success<FunkoDto, DomainError>(creado.ToDto());
     }
 
-    public Funko? UpdatePrice(long id, decimal precio)
+    public Result<FunkoDto, DomainError> Update(long id, UpdateFunkoDto request)
+    {
+        var validacion = validator.ValidateUpdate(request);
+        if (validacion.IsFailure)
+            return Result.Failure<FunkoDto, DomainError>(validacion.Error);
+
+        if (repository.ExistsByName(request.Nombre, id))
+            return Result.Failure<FunkoDto, DomainError>(FunkoErrors.AlreadyExists(request.Nombre));
+
+        if (repository.Update(id, request.ToFunko()) is not { } actualizado)
+            return Result.Failure<FunkoDto, DomainError>(FunkoErrors.NotFound(id));
+
+        return Result.Success<FunkoDto, DomainError>(actualizado.ToDto());
+    }
+
+    public Result<FunkoDto, DomainError> UpdatePrice(long id, decimal precio)
     {
         if (precio < 0)
-            throw new ArgumentException("El precio no puede ser negativo");
-        
-        return repository.UpdatePrecio(id, precio);
+            return Result.Failure<FunkoDto, DomainError>(
+                FunkoErrors.Validation(["El precio no puede ser negativo"]));
+
+        if (repository.UpdatePrecio(id, precio) is not { } actualizado)
+            return Result.Failure<FunkoDto, DomainError>(FunkoErrors.NotFound(id));
+
+        return Result.Success<FunkoDto, DomainError>(actualizado.ToDto());
     }
 
-    public bool Delete(long id) => repository.SoftDelete(id);
+    public Result<bool, DomainError> Delete(long id)
+    {
+        if (!repository.SoftDelete(id))
+            return Result.Failure<bool, DomainError>(FunkoErrors.NotFound(id));
 
-    public IEnumerable<Funko> GetByName(string termino) => repository.GetByName(termino);
+        return Result.Success<bool, DomainError>(true);
+    }
+
+    public IEnumerable<FunkoDto> GetByName(string termino) =>
+        repository.GetByName(termino).Select(f => f.ToDto());
 }
