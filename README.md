@@ -331,11 +331,11 @@ responden correctamente desde fuera del contenedor.
 Este repositorio parte del CRUD inicial (en memoria, con DI básica) que hizo Jesús
 Cobo en [`FunkoApi`](https://github.com/JesusCoboArrogante/FunkoApi). Se clonó en
 local y se ha ido corrigiendo y ampliando por fases desde ahí, documentado paso a
-paso en [`BITACORA.md`](BITACORA.md). De la base original se arreglaron, entre otras
+paso en [`DECISIONES.md`](DECISIONES.md). De la base original se arreglaron, entre otras
 cosas: un error que impedía compilar, un controlador que ignoraba por completo la
 inyección de dependencias, dos endpoints con la misma ruta, y la ausencia de
 `Create`, de manejo de excepciones y de documentación Swagger — el detalle completo
-está en la Entrada 0 de la bitácora.
+está en la Entrada 0 de `DECISIONES.md`.
 
 ---
 
