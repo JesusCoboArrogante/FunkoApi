@@ -11,36 +11,36 @@ namespace FunkoAppi01.Controller;
 public class FunkoController(IServiceFunko service) : ControllerBase
 {
     [HttpGet]
-    public ActionResult<IEnumerable<FunkoDto>> GetAll() => Ok(service.GetAll());
+    public async Task<ActionResult<IEnumerable<FunkoDto>>> GetAll() => Ok(await service.GetAllAsync());
 
     [HttpGet("{id:long}")]
-    public ActionResult<FunkoDto> GetById(long id) => ToActionResult(service.GetById(id));
+    public async Task<ActionResult<FunkoDto>> GetById(long id) => ToActionResult(await service.GetByIdAsync(id));
 
     [HttpGet("search")]
-    public ActionResult<IEnumerable<FunkoDto>> Search([FromQuery] string? nombre) =>
-        Ok(service.GetByName(nombre ?? string.Empty));
+    public async Task<ActionResult<IEnumerable<FunkoDto>>> Search([FromQuery] string? nombre) =>
+        Ok(await service.GetByNameAsync(nombre ?? string.Empty));
 
     [HttpPost]
-    public ActionResult<FunkoDto> Create(CreateFunkoDto request)
+    public async Task<ActionResult<FunkoDto>> Create(CreateFunkoDto request)
     {
-        var resultado = service.Add(request);
+        var resultado = await service.AddAsync(request);
         return resultado.IsSuccess
             ? CreatedAtAction(nameof(GetById), new { id = resultado.Value.Id }, resultado.Value)
             : ToActionResult(resultado);
     }
 
     [HttpPut("{id:long}")]
-    public ActionResult<FunkoDto> Update(long id, UpdateFunkoDto request) =>
-        ToActionResult(service.Update(id, request));
+    public async Task<ActionResult<FunkoDto>> Update(long id, UpdateFunkoDto request) =>
+        ToActionResult(await service.UpdateAsync(id, request));
 
     [HttpPatch("{id:long}")]
-    public ActionResult<FunkoDto> UpdatePrice(long id, [FromBody] decimal precio) =>
-        ToActionResult(service.UpdatePrice(id, precio));
+    public async Task<ActionResult<FunkoDto>> UpdatePrice(long id, [FromBody] decimal precio) =>
+        ToActionResult(await service.UpdatePriceAsync(id, precio));
 
     [HttpDelete("{id:long}")]
-    public ActionResult Delete(long id)
+    public async Task<ActionResult> Delete(long id)
     {
-        var resultado = service.Delete(id);
+        var resultado = await service.DeleteAsync(id);
         return resultado.IsSuccess ? NoContent() : ToActionResult(resultado).Result!;
     }
 

@@ -1,7 +1,9 @@
 using System.Text.Json;
+using FunkoAppi01.Entity;
 using FunkoAppi01.Infraestructure;
 using FunkoAppi01.Middleware;
 using FunkoAppi01.Repository;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,11 +21,18 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services
+    .AddPersistence(builder.Configuration)
     .AddRepositories()
     .AddValidators()
     .AddServices();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 app.UseSerilogRequestLogging();
 

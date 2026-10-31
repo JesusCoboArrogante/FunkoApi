@@ -1,5 +1,4 @@
-﻿
-using FunkoAppi01.Repository;
+﻿using FunkoAppi01.Repository;
 
 namespace FunkoAppi01.Infraestructure;
 
@@ -7,8 +6,8 @@ public static class RepositoriesConfig
 {
     public static IServiceCollection AddRepositories(this IServiceCollection services)
     {
-        
-        services.AddSingleton<IRepositoryFunko, RepositoryFunko>();
+        // Scoped: comparte el mismo AppDbContext (tambien Scoped) durante toda la peticion.
+        services.AddScoped<IRepositoryFunko, RepositoryFunko>();
         return services;
     }
 }
