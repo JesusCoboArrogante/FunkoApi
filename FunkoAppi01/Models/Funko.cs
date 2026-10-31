@@ -3,14 +3,11 @@
 public record Funko
 {
     public long      Id          { get; set; }
-    public string    Nombre      { get; set; }
+    public string    Nombre      { get; set; } = string.Empty;
     public decimal   Precio      { get; set; }
-    public string    Categoria   { get; set; }
-    public DateTime  CreateAt    { get; set; }
-    public DateTime? UpdateAt    { get; set; }
-    public DateTime? DeleteAt    { get; set; }
-    
-    public bool IsActivo         { get; set; }
-
-
+    public int       Stock       { get; set; }
+    public string    Categoria   { get; set; } = string.Empty;
+    public bool      IsDeleted   { get; set; }
+    public DateTime  CreatedAt   { get; set; }
+    public DateTime? UpdatedAt   { get; set; }
 }

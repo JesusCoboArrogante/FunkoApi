@@ -15,9 +15,9 @@ public class RepositoryFunko: IRepositoryFunko
         var nuevo = funko with
         {
             Id = _nextId++,
-            CreateAt = DateTime.Now
+            CreatedAt = DateTime.Now
         };
-        
+
         _funkos[nuevo.Id] = nuevo;
         return nuevo;
     }
@@ -33,9 +33,9 @@ public class RepositoryFunko: IRepositoryFunko
         {
             Nombre = funko.Nombre,
             Precio = funko.Precio,
+            Stock = funko.Stock,
             Categoria = funko.Categoria,
-            Imagen = funko.Imagen,
-            UpdateAt = DateTime.Now
+            UpdatedAt = DateTime.Now
         };
         _funkos[actualizar.Id] = actualizar;
         return actualizar;
@@ -48,8 +48,8 @@ public class RepositoryFunko: IRepositoryFunko
             return false;
         }
 
-        _funkos[id] = existente with { DeleteAt = DateTime.Now};
-        
+        _funkos[id] = existente with { IsDeleted = true, UpdatedAt = DateTime.Now };
+
         return true;
     }
 
@@ -63,9 +63,9 @@ public class RepositoryFunko: IRepositoryFunko
         var actualizar = existente with
         {
             Precio = precio,
-            UpdateAt = DateTime.Now
+            UpdatedAt = DateTime.Now
         };
-        
+
         _funkos[actualizar.Id] = actualizar;
         return actualizar;
     }
@@ -79,6 +79,6 @@ public class RepositoryFunko: IRepositoryFunko
             .ToList();
     }
 
-    private List<Funko> Activos() => [.. _funkos.Values.Where(p => p.IsActivo)];
-    private  Funko? TryGet(long id) => _funkos.TryGetValue(id, out Funko? funko) && funko.IsActivo ? funko : null;
+    private List<Funko> Activos() => [.. _funkos.Values.Where(p => !p.IsDeleted)];
+    private  Funko? TryGet(long id) => _funkos.TryGetValue(id, out Funko? funko) && !funko.IsDeleted ? funko : null;
 }
