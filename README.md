@@ -2,7 +2,8 @@
 
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?style=flat-square&logo=dotnet&logoColor=white)
 ![C#](https://img.shields.io/badge/C%23-14-239120?style=flat-square&logo=csharp&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-31%20passing-2ea44f?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-32%20passing-2ea44f?style=flat-square)
+![SQLite](https://img.shields.io/badge/EF%20Core-SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-multi--stage-2496ED?style=flat-square&logo=docker&logoColor=white)
 ![Swagger](https://img.shields.io/badge/OpenAPI-Swagger-85EA2D?style=flat-square&logo=swagger&logoColor=black)
 
@@ -35,7 +36,8 @@ errores de dominio sin excepciones, documentación Swagger y despliegue con Dock
 
 ```
 Program.cs → FunkoController → ServiceFunko → FunkoValidator
-                                             → RepositoryFunko   (en memoria, Dictionary<long, Funko>)
+                                             → RepositoryFunko   (EF Core, async)
+                                                   → AppDbContext → SQLite (Dev) / PostgreSQL (Prod, pendiente)
 ```
 
 El controlador no conoce el repositorio ni el modelo de dominio: solo habla con
@@ -51,6 +53,12 @@ traduce cada tipo de error a su código HTTP:
 | `NotFound` | `404` | El id no existe (o ya estaba borrado) |
 | `AlreadyExists` | `409` | Ya hay un Funko activo con ese nombre |
 | `Validation` | `400` | El nombre o la categoría están vacíos/en blanco |
+
+La persistencia es real (EF Core + SQLite, con migraciones), no en memoria: hay una
+relación **Uno a Muchos** entre `Categoria` y `Funko` en la base de datos, y el
+borrado es lógico (`IsDeleted`, oculto automáticamente de cualquier consulta con un
+`HasQueryFilter`). El modelo de dominio sigue viendo `Categoria` como un simple
+`string` — es el repositorio quien resuelve o crea la fila de categoría al guardar.
 
 El repositorio nunca lanza ni devuelve un `Result`: solo valores planos (`null`,
 `false`). Es el servicio quien decide qué significa cada uno. Las Data Annotations
@@ -121,7 +129,7 @@ Para pararlo: `Ctrl+C` y después `docker compose down`.
 dotnet test
 ```
 
-**31 tests**, con NUnit, Moq y FluentAssertions, patrón AAA (Arrange, Act, Assert) y
+**32 tests**, con NUnit, Moq y FluentAssertions, patrón AAA (Arrange, Act, Assert) y
 separados en `CasosPositivos` y `CasosNegativos`.
 
 | Qué se prueba | Nº |
@@ -129,7 +137,7 @@ separados en `CasosPositivos` y `CasosNegativos`.
 | `DomainError` | 3 |
 | `FunkoMapper` | 3 |
 | `FunkoValidator` | 7 |
-| `RepositoryFunko` (en memoria, sin mocks) | 7 |
+| `RepositoryFunko` (SQLite real en memoria, sin mocks) | 8 |
 | `ServiceFunko` (repositorio y validador mockeados) | 11 |
 
 Los de `ServiceFunko` no solo miran lo que devuelve el método, sino a quién llama:
@@ -179,12 +187,37 @@ solo se usaba el booleano para filtrar. Un único campo `IsDeleted` es suficient
 lo que pide la pauta; mantener los dos obligaría a sincronizarlos siempre juntos y es
 fuente de bugs si alguno se actualiza y el otro no.
 
-### Por qué el repositorio sigue siendo síncrono
+### El repositorio pasó a async en cuanto hubo E/S real
 
-El repositorio es un `Dictionary` en memoria: no hay ninguna E/S que esperar todavía.
-Convertirlo a `async`/`Task` ahora sería ceremonia sin beneficio real. Se pasará a
-asíncrono cuando llegue EF Core (persistencia real), que es cuando aparece la E/S que
-justifica el `async`.
+Mientras el repositorio era un `Dictionary` en memoria no había ninguna E/S que
+esperar, así que se quedó síncrono (ver la decisión equivalente más abajo, cuando
+aún no existía la base de datos). En cuanto llegó EF Core con SQLite, todo el camino
+—repositorio, servicio y controlador— pasó a `async`/`Task`, que es justo el momento
+en el que el `async` empieza a tener sentido real.
+
+### `Categoria` es solo un texto en el dominio, una relación real en la base de datos
+
+Los DTOs de la pauta (`CreateFunkoDto`, `FunkoDto`...) solo piden `Categoria` como
+una cadena de texto. La base de datos sí tiene la relación Uno a Muchos real que pide
+la pauta (`CategoriaEntity` ← `FunkoEntity`, con clave foránea e índice único). El
+repositorio resuelve o crea la fila de categoría por nombre al guardar un Funko, y la
+aplana de vuelta a texto al leer. Así no hay que tocar DTOs, validador, mapper ni
+tests ya hechos solo para que el dominio conozca una relación que no necesita conocer.
+
+### Migraciones reales, no `EnsureCreated`
+
+La base de datos se crea con `dotnet ef migrations` + `Database.MigrateAsync()` al
+arrancar, no con `EnsureCreatedAsync()` (que sí es válido y es lo que usan otras
+prácticas de la unidad). Aquí se eligió así porque esta pauta pide explícitamente
+"migraciones" por su nombre.
+
+### Por qué SQLite y no PostgreSQL (todavía)
+
+La pauta permite "PostgreSQL (o SQLite en desarrollo)". Se implementó SQLite primero,
+con migraciones reales y probado también dentro de Docker, para no disparar el
+bloque de trabajo de esta fase. El paquete de PostgreSQL (Npgsql) ya está instalado
+y el código elige el proveedor según `DatabaseSettings:Provider`; activarlo del todo
+(con su propio `docker-compose` y perfil Production) queda para la fase 12.
 
 ### El puerto del contenedor no estaba publicado
 
@@ -206,6 +239,7 @@ responden correctamente desde fuera del contenedor.
 | Errores sin excepciones | CSharpFunctionalExtensions (`Result<T, DomainError>`) |
 | Documentación | Swashbuckle.AspNetCore (Swagger UI en `/swagger`) |
 | Logging | Serilog (consola + fichero con rotación diaria, nivel por perfil) |
+| Persistencia | EF Core (SQLite en Dev; PostgreSQL con Npgsql, pendiente de activar) |
 | Inyección de dependencias | `Microsoft.Extensions.DependencyInjection` + Scrutor |
 | Contenedores | Dockerfile multi-etapa + Docker Compose |
 | Tests | NUnit + Moq + FluentAssertions |
@@ -234,8 +268,9 @@ Siguiendo la pauta de la práctica, fases que todavía no se han abordado:
 - ~~**Fase 8 — Configuración y logs**~~ ✅ Hecha: Serilog a consola y fichero (rotación
   diaria), nivel configurable por perfil (`appsettings.json`/`appsettings.Development.json`)
   y log estructurado de crear/actualizar/borrar en `ServiceFunko`.
-- **Fase 9 — Persistencia real:** el repositorio sigue en memoria (`Dictionary`). Falta
-  EF Core con PostgreSQL/SQLite, la relación con `Categoria` y las migraciones.
+- ~~**Fase 9 — Persistencia real**~~ ✅ Hecha con SQLite: EF Core, migraciones reales
+  y relación Uno a Muchos con `Categoria`. **Falta PostgreSQL** para el perfil
+  Production (decisión de alcance, ver Decisiones de diseño) — aparcado a la fase 12.
 - **Fase 10 — Seguridad:** no hay JWT ni BCrypt; todas las operaciones son públicas.
 - **Fase 11 (parcial) — Tests de integración:** hay 31 tests unitarios, pero ninguno
   de integración con `WebApplicationFactory` todavía.

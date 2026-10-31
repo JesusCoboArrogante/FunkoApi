@@ -232,4 +232,42 @@ Normas de esta bitácora (ver `CLAUDE.md` en `Entorno-Servidor/`, puntos 7 y 9):
 
 **Qué queda pendiente:** fase 9 (EF Core — aquí sí aparecerán clases `Config/` propias para la cadena de conexión, con `IOptions<T>`, siguiendo el patrón de `DatabaseConfig` de `RepositorioRemoto`), fase 10 (JWT/BCrypt), fase 11 (tests de integración), fase 12 (docker-compose con base de datos).
 
+## Entrada 8 — `feature/ef-core`: fase 9 de la pauta (persistencia real)
+
+**Fecha:** 2026-10-31
+
+**Antes de tocar código:** se revisó `RepositorioRemoto/Entity/` (`UserEntity`, `AppDbContext` con Fluent API pura, sin atributos en la entidad), `Config/DatabaseConfig.cs` (clase + `SectionName` + `IOptions`) y `Repositories/UserRepository.cs` (repositorio async, `AsNoTracking()` en las lecturas, `FindAsync` para escrituras). Se copió el mismo patrón.
+
+**Decisión de alcance planteada a Cristian antes de empezar y aceptada:** la pauta permite "PostgreSQL (o SQLite en desarrollo)". Para no disparar este bloque, se implementó **solo SQLite** con migraciones reales; PostgreSQL + el `docker-compose` con base de datos quedan para la fase 12.
+
+**Qué se hizo:**
+1. Rama `feature/ef-core` desde `dev`. Paquetes: `Microsoft.EntityFrameworkCore.Sqlite`, `Microsoft.EntityFrameworkCore.Design`, `Npgsql.EntityFrameworkCore.PostgreSQL` (esta última ya instalada para cuando se active el perfil Production, aunque no se usa todavía — el `Provider` en `appsettings.json` decide cuál se registra).
+2. `Config/DatabaseConfig.cs`: `Provider` (`Sqlite` por defecto) + `ConnectionString`, igual que `DatabaseConfig` de `RepositorioRemoto`.
+3. `Entity/FunkoEntity.cs` y `Entity/CategoriaEntity.cs`: entidades limpias, sin atributos. **Relación Uno a Muchos** `CategoriaEntity 1 → N FunkoEntity`, configurada en `AppDbContext.OnModelCreating` con Fluent API: `HasOne().WithMany().HasForeignKey()`, índice único en `CategoriaEntity.Nombre`, índice único filtrado en `FunkoEntity.Nombre` (solo entre los no borrados) y `HasQueryFilter(f => !f.IsDeleted)` para que cualquier consulta normal oculte los borrados sin tener que repetir el filtro en cada método.
+4. `Mappers/FunkoEntityMapper.cs`: aplana `FunkoEntity.Categoria.Nombre` al `string Categoria` del modelo de dominio (el dominio no conoce la relación, solo la tabla — mismo principio que "la tabla es plana" del README de `RepositorioRemoto`, pero a la inversa: aquí la relación vive en la base de datos y se aplana al leer, porque la pauta pide la relación real en la tabla pero los DTOs de Funko solo piden el nombre de la categoría como texto).
+5. `Repository/RepositoryFunko.cs`: reescrito entero sobre `AppDbContext`, async de arriba a abajo. `AddAsync`/`UpdateAsync` resuelven o crean la fila de `Categoria` por nombre (`ObtenerOCrearCategoria`) antes de guardar el Funko.
+6. `Service`/`Controller`: todas las firmas pasan a `Task`/`async`. Es el cambio que se había dejado pendiente desde el bloque 4 ("por qué el repositorio sigue siendo síncrono") — ahora sí hay E/S real que justifica el `async`.
+7. `Infraestructure/PersistenceConfig.cs`: `AddPersistence(configuration)` registra el `AppDbContext` eligiendo `UseSqlite`/`UseNpgsql` según `DatabaseSettings:Provider`. `RepositoriesConfig`: `IRepositoryFunko` pasó de `AddSingleton` a **`AddScoped`** (un `DbContext` no puede vivir dentro de un singleton sin arriesgar fugas de conexión entre peticiones).
+8. **Migraciones reales** (no `EnsureCreated`, que es lo que usa `RepositorioRemoto` pero la pauta de Funko pide explícitamente "migraciones"): `dotnet ef migrations add InitialCreate`, aplicada en `Program.cs` con `await db.Database.MigrateAsync()` al arrancar.
+9. Verificación en tres capas, con especial cuidado en la tercera porque es persistencia real:
+   - **Compila**: 0 errores.
+   - **Arranca**: `dotnet run` crea `funkos.db` y aplica la migración sola.
+   - **Funciona de verdad**: ciclo completo con `curl` contra SQLite real (crear, duplicado → 409, dos Funkos con la misma categoría comparten la fila de `Categoria`, actualizar, borrar lógico). Y lo más importante para "persistencia real": **se paró el proceso, se volvió a arrancar, y el Funko seguía ahí** — eso es lo que distingue esta fase de las anteriores, donde todo vivía en un `Dictionary` que se vaciaba en cada reinicio.
+   - Probado también **dentro de Docker** (`docker compose up --build`): SQLite funciona igual en el contenedor Linux, sin tener que instalar nada adicional.
+10. Tests: `RepositoryFunkoTests` ya no mockea nada — usa una base SQLite real en memoria (`DataSource=:memory:` con una conexión abierta durante el test), siguiendo la regla 4 de `CLAUDE.md` ("base de datos real, no simulada"). `ServiceFunkoTests` se adaptó a async (`ReturnsAsync`, `async Task`). **32/32 tests en verde** (31 anteriores + 1 nuevo: que dos Funkos con la misma categoría comparten la fila).
+11. Tres commits (`feat: anadir persistencia EF Core...`, `refactor: pasar repositorio, servicio y controlador...`, `test: adaptar los tests...`), fusionados en `dev` con `--no-ff`.
+
+**Decisión tomada:** el dominio (`Funko.Categoria`) sigue siendo un `string`, la relación real solo existe en la base de datos.
+- **Por qué:** los DTOs de la pauta (`CreateFunkoDto`, `FunkoDto`...) solo piden `Categoria` como texto, no como un objeto con su propio id. Convertir el dominio a conocer la relación obligaría a tocar DTOs, validador, mapper y tests ya hechos sin que la pauta lo exija. El repositorio resuelve (o crea) la fila de `Categoria` por nombre al guardar, y la aplana al leer — la relación es un detalle de persistencia, no de dominio.
+- **Alternativa descartada:** modelar `Categoria` como entidad de dominio propia (con su `Id`) y propagarla por DTOs/validador/mapper. Se descarta por ahora: más trabajo, sin que la pauta lo pida, y con el riesgo de romper fases ya cerradas y verificadas.
+
+**Decisión tomada:** usar migraciones de EF Core en vez de `EnsureCreatedAsync` (que es lo que hace `RepositorioRemoto`).
+- **Por qué:** la pauta de Funko pide migraciones explícitamente ("con migraciones"); la de `RepositorioRemoto` no lo pedía con esas palabras. Se sigue la pauta de cada práctica, no se copia el `RepositorioRemoto` a ciegas donde las pautas difieren.
+
+**Qué queda pendiente:**
+- PostgreSQL para el perfil Production + `docker-compose` con la base de datos (aparcado a la fase 12, con el paquete Npgsql ya instalado).
+- Seguridad JWT + BCrypt (fase 10).
+- Tests de integración con `WebApplicationFactory` (fase 11, parcial).
+- Dos vulnerabilidades conocidas en paquetes transitivos (`SQLitePCLRaw.lib.e_sqlite3` 2.1.11, `System.Security.Cryptography.Pkcs` 9.0.0), avisadas por `dotnet build`/`dotnet add`. Son dependencias indirectas de EF Core/Npgsql en esta versión de paquetes para .NET 10; no se ha fijado una versión distinta porque podría romper la compatibilidad — queda anotado para revisar si salen versiones corregidas antes de la entrega.
+
 <!-- La siguiente entrada se añade aquí, con el mismo formato: Qué se hizo / Decisión y porqué / Alternativas descartadas / Pendiente -->
