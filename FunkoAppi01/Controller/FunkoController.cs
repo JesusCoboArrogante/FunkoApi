@@ -1,46 +1,40 @@
-﻿using System.Text.Json;
-using FunkoAppi01.Models;
-using FunkoAppi01.Repository;
+﻿using FunkoAppi01.Models;
+using FunkoAppi01.Service;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FunkoAppi01.Controller;
 
 [ApiController]
 [Route("api/[controller]")]
-public class FunkoController : ControllerBase
+public class FunkoController(IServiceFunko service) : ControllerBase
 {
-    private static List<Funko> _funkos = new();
-    private static readonly IRepositoryFunko repo = new RepositoryFunko();
-
     [HttpGet]
-    public ActionResult<List<Funko>> GetAll() => Ok(repo.GetAll());
-    
-    [HttpGet("{id:long}")]
-    public ActionResult<Funko> GetById(long id) => 
-        repo.GetById(id) is { } funko ? Ok(funko) : NotFound();
-    
-    [HttpPost ("{id:long}")]
-    public ActionResult<Funko> Update(long id, Funko funko) =>
-        repo.Update(id, funko) is { } actualizado ? Ok(actualizado) : NotFound();
+    public ActionResult<IEnumerable<Funko>> GetAll() => Ok(service.GetAll());
 
-    [HttpPost("{id:long}")]
-    public ActionResult<Funko> Patch(long id, Dictionary<string, object> cambios)
+    [HttpGet("{id:long}")]
+    public ActionResult<Funko> GetById(long id) =>
+        service.GetById(id) is { } funko ? Ok(funko) : NotFound();
+
+    [HttpGet("search")]
+    public ActionResult<IEnumerable<Funko>> Search([FromQuery] string? nombre) =>
+        Ok(service.GetByName(nombre ?? string.Empty));
+
+    [HttpPost]
+    public ActionResult<Funko> Create(Funko funko)
     {
-        if (cambios.TryGetValue("Precio", out var  precio) && precio is JsonElement json)
-        {
-            return repo.UpdatePrecio(id, json.GetDecimal()) is { } actualizado
-                ? Ok(actualizado)
-                :NotFound();
-        }
-        return BadRequest();
+        var creado = service.Add(funko);
+        return CreatedAtAction(nameof(GetById), new { id = creado.Id }, creado);
     }
-    
+
+    [HttpPut("{id:long}")]
+    public ActionResult<Funko> Update(long id, Funko funko) =>
+        service.Update(id, funko) is { } actualizado ? Ok(actualizado) : NotFound();
+
+    [HttpPatch("{id:long}")]
+    public ActionResult<Funko> UpdatePrice(long id, [FromBody] decimal precio) =>
+        service.UpdatePrice(id, precio) is { } actualizado ? Ok(actualizado) : NotFound();
+
     [HttpDelete("{id:long}")]
     public ActionResult Delete(long id) =>
-        repo.SoftDelete(id) ? NoContent() : NotFound();
-
-    [HttpPost("search")]
-    public ActionResult<List<Funko>> Search([FromQuery] string? nombre) =>
-        Ok(repo.GetByName(nombre));
-    
+        service.Delete(id) ? NoContent() : NotFound();
 }
