@@ -91,4 +91,33 @@ Normas de esta bitácora (ver `CLAUDE.md` en `Entorno-Servidor/`, puntos 7 y 9):
 - Swagger sigue sin configurar (bug nº8).
 - DTOs de entrada/salida (fase 7 de la pauta) — por ahora el controlador expone el propio `Funko` de dominio, aceptable en esta fase pero a corregir antes de EF Core.
 
+## Entrada 3 — `feature/middleware-swagger`: manejo de errores y documentación
+
+**Fecha:** 2026-10-31
+
+**Qué se hizo:**
+1. Rama `feature/middleware-swagger` desde `dev`.
+2. Implementado `Middleware/ExceptionHandlerMiddleware.cs` de verdad (antes solo tenía los `using`, ninguna clase):
+   - Captura `ArgumentException` (las validaciones de `ServiceFunko`) → `400 Bad Request` con `ProblemDetails`.
+   - Captura cualquier otra excepción → `500 Internal Server Error` con `ProblemDetails` genérico (sin filtrar el mensaje interno al cliente) y log con `ILogger`.
+   - Registrado en `Program.cs` con `app.UseMiddleware<ExceptionHandlerMiddleware>()`, antes de `MapControllers()`.
+3. Swagger: el paquete que ya traía el proyecto (`Microsoft.AspNetCore.OpenApi`) **no sirve una UI**, solo genera el documento OpenAPI nativo de .NET. Para cumplir el requisito de entrega ("debe arrancar y servir la documentación en `/swagger`") se instaló `Swashbuckle.AspNetCore` (10.3.1) y se añadió `AddSwaggerGen()` + `UseSwagger()` + `UseSwaggerUI()`.
+4. Verificación en tres capas:
+   - **Compila**: 0 errores (tuvimos que matar antes un proceso `FunkoAppi01.exe` que había quedado corriendo de la verificación del bloque anterior y bloqueaba el `.exe` — nada relacionado con el código, solo higiene del entorno).
+   - **Arranca**: `dotnet run` sin errores.
+   - **Funciona de verdad**: `GET /swagger/index.html` → 200, `GET /swagger/v1/swagger.json` → 200. `POST /api/Funko` con nombre vacío o precio negativo → ahora devuelve `400` con `{"title":"Solicitud invalida","detail":"..."}` en vez del 500 crudo de antes.
+5. Dos commits en la rama (`feat: implementar el middleware...`, `chore: anadir Swashbuckle...`), fusionados en `dev` con `--no-ff`, rama borrada.
+
+**Decisión tomada:** usar `Swashbuckle.AspNetCore` en vez del soporte nativo de OpenAPI que ya traía el proyecto.
+- **Por qué:** el paquete nativo (`Microsoft.AspNetCore.OpenApi` + `MapOpenApi()`) solo expone el JSON, no una interfaz visual en `/swagger`; la entrega pide explícitamente esa ruta con documentación servida. Swashbuckle es además la opción estándar que se usa en el resto de ejemplos de la asignatura.
+- **Alternativa descartada:** quedarnos con `MapOpenApi()` nativo y montar nosotros una UI estática. Más trabajo para el mismo resultado, sin ninguna ventaja para esta fase.
+
+**Nota de transparencia:** el commit `feat: implementar el middleware...` incluye también las dos líneas de `Program.cs` que registran los servicios de Swagger (`AddEndpointsApiExplorer`/`AddSwaggerGen`), porque tocaban el mismo fichero en la misma edición y separarlas habría significado dos ediciones manuales del mismo archivo sin beneficio real; el `UseSwagger()`/`UseSwaggerUI()` y el paquete en sí quedaron en el commit `chore` aparte. No es una violación grave de "un propósito por commit", pero se deja constancia aquí tal como pide el punto 9 de `CLAUDE.md`.
+
+**Qué queda pendiente:**
+- DTOs de entrada/salida y validador de dominio (fase 7 de la pauta) — el controlador sigue aceptando/devolviendo el `Funko` de dominio directamente.
+- Las validaciones del servicio siguen siendo `ArgumentException`, no `Result<T, DomainError>` — lo correcto según nuestra arquitectura, pendiente para cuando ataquemos esa fase.
+- README real con instrucciones + justificación de decisiones (bug nº11 del informe) — sigue sin hacerse.
+- Historial de commits: ya llevamos 8 commits atómicos de fases propias desde que se retomó el proyecto, pero los 2 "first commit" de Jesús siguen en la base del historial (es correcto dejarlos, documentan de dónde partimos).
+
 <!-- La siguiente entrada se añade aquí, con el mismo formato: Qué se hizo / Decisión y porqué / Alternativas descartadas / Pendiente -->
