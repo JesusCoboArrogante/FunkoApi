@@ -15,6 +15,8 @@ public static class PersistenceConfig
         {
             if (databaseConfig.Provider.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase))
                 options.UseNpgsql(databaseConfig.ConnectionString);
+            else if (databaseConfig.Provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase))
+                options.UseInMemoryDatabase(databaseConfig.ConnectionString); // solo para WebApplicationFactory en tests
             else
                 options.UseSqlite(databaseConfig.ConnectionString);
         });

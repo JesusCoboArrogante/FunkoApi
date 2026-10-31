@@ -44,7 +44,14 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
+
+    // El proveedor InMemory (tests de integracion con WebApplicationFactory) no
+    // soporta migraciones; solo SQLite/PostgreSQL (relacionales) las necesitan.
+    if (db.Database.IsRelational())
+        await db.Database.MigrateAsync();
+    else
+        await db.Database.EnsureCreatedAsync();
+
     await UserSeeder.SeedAsync(db);
 }
 
@@ -62,3 +69,7 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+// Visible para WebApplicationFactory<Program> en los tests de integracion
+// (Program.cs usa Top Level Statements, que generan una clase Program implicita).
+public partial class Program;
