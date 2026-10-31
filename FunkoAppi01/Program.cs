@@ -2,8 +2,12 @@ using System.Text.Json;
 using FunkoAppi01.Infraestructure;
 using FunkoAppi01.Middleware;
 using FunkoAppi01.Repository;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((context, services, loggerConfig) =>
+    loggerConfig.ReadFrom.Configuration(context.Configuration));
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -20,6 +24,8 @@ builder.Services
     .AddServices();
 
 var app = builder.Build();
+
+app.UseSerilogRequestLogging();
 
 app.UseMiddleware<ExceptionHandlerMiddleware>();
 
