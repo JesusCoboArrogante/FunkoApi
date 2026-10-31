@@ -2,10 +2,11 @@
 
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?style=flat-square&logo=dotnet&logoColor=white)
 ![C#](https://img.shields.io/badge/C%23-14-239120?style=flat-square&logo=csharp&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-32%20passing-2ea44f?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-40%20passing-2ea44f?style=flat-square)
 ![SQLite](https://img.shields.io/badge/EF%20Core-SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-multi--stage-2496ED?style=flat-square&logo=docker&logoColor=white)
 ![Swagger](https://img.shields.io/badge/OpenAPI-Swagger-85EA2D?style=flat-square&logo=swagger&logoColor=black)
+![JWT](https://img.shields.io/badge/Auth-JWT%20%2B%20BCrypt-000000?style=flat-square&logo=jsonwebtokens&logoColor=white)
 
 Práctica 3 de Desarrollo Web en Entorno Servidor (DWES), unidad 2: una API REST para
 gestionar un catálogo de Funkos (figuras de vinilo coleccionables).
@@ -20,15 +21,18 @@ gestionar un catálogo de Funkos (figuras de vinilo coleccionables).
 CRUD completo sobre un catálogo de Funkos en memoria, con validación en dos capas,
 errores de dominio sin excepciones, documentación Swagger y despliegue con Docker.
 
-| Operación | Verbo | Ruta | Éxito |
-|---|---|---|---|
-| Listar todos los Funkos | `GET` | `/api/Funko` | `200` |
-| Consultar un Funko por id | `GET` | `/api/Funko/{id}` | `200` / `404` |
-| Buscar Funkos por nombre | `GET` | `/api/Funko/search?nombre=` | `200` |
-| Crear un Funko | `POST` | `/api/Funko` | `201` |
-| Actualizar un Funko completo | `PUT` | `/api/Funko/{id}` | `200` / `404` |
-| Actualizar solo el precio | `PATCH` | `/api/Funko/{id}` | `200` / `404` |
-| Eliminar un Funko (borrado lógico) | `DELETE` | `/api/Funko/{id}` | `204` / `404` |
+| Operación | Verbo | Ruta | Auth | Éxito |
+|---|---|---|---|---|
+| Listar todos los Funkos | `GET` | `/api/Funko` | pública | `200` |
+| Consultar un Funko por id | `GET` | `/api/Funko/{id}` | pública | `200` / `404` |
+| Buscar Funkos por nombre | `GET` | `/api/Funko/search?nombre=` | pública | `200` |
+| Crear un Funko | `POST` | `/api/Funko` | autenticado | `201` |
+| Actualizar un Funko completo | `PUT` | `/api/Funko/{id}` | autenticado | `200` / `404` |
+| Actualizar solo el precio | `PATCH` | `/api/Funko/{id}` | autenticado | `200` / `404` |
+| Eliminar un Funko (borrado lógico) | `DELETE` | `/api/Funko/{id}` | **solo Admin** | `204` / `404` / `403` |
+| Registrarse | `POST` | `/api/auth/signup` | pública | `201` / `409` |
+| Iniciar sesión | `POST` | `/api/auth/login` | pública | `200` / `401` |
+| Perfil del usuario autenticado | `GET` | `/api/auth/me` | autenticado | `200` / `401` |
 
 ---
 
@@ -53,6 +57,8 @@ traduce cada tipo de error a su código HTTP:
 | `NotFound` | `404` | El id no existe (o ya estaba borrado) |
 | `AlreadyExists` | `409` | Ya hay un Funko activo con ese nombre |
 | `Validation` | `400` | El nombre o la categoría están vacíos/en blanco |
+| `Unauthorized` | `401` | Credenciales inválidas, o sin token / token inválido |
+| `Conflict` | `409` | Email ya registrado (`signup`) |
 
 La persistencia es real (EF Core + SQLite, con migraciones), no en memoria: hay una
 relación **Uno a Muchos** entre `Categoria` y `Funko` en la base de datos, y el
@@ -70,6 +76,37 @@ ejemplo, una cadena de solo espacios).
 Las excepciones que de verdad son inesperadas (no un fallo de negocio, sino un error
 de programación) las captura `ExceptionHandlerMiddleware` y las traduce también a
 `ProblemDetails`, para que el cliente nunca vea un 500 en blanco.
+
+---
+
+## 🔐 Autenticación
+
+Lectura pública, escritura solo para usuarios autenticados, borrado solo para el rol
+`ADMIN`. JWT firmado con HMAC-SHA256 (sin ASP.NET Core Identity: enfoque manual, con
+`JwtService` + `AuthService`), contraseñas con BCrypt (`workFactor: 11`).
+
+**Usuarios de prueba** (creados automáticamente al arrancar si la tabla está vacía):
+
+| Email | Contraseña | Rol |
+|---|---|---|
+| `admin@funko.com` | `admin123` | `ADMIN` |
+| `user@funko.com` | `user123` | `USER` |
+
+```bash
+curl -X POST http://localhost:5230/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@funko.com","password":"admin123"}'
+```
+
+La respuesta trae `accessToken`: se usa como `Authorization: Bearer <token>` en las
+peticiones protegidas. En Swagger (`/swagger`), el botón **Authorize** (arriba a la
+derecha) pide el token con el mismo formato (`Bearer eyJ...`).
+
+> [!NOTE]
+> El token dura 15 minutos (`Jwt:ExpirationMinutes` en `appsettings.json`). La clave
+> de firma vive en claro en `appsettings.json` porque esto es una práctica académica
+> con SQLite local — en un proyecto real iría a `dotnet user-secrets`, una variable
+> de entorno o un gestor de secretos, nunca comiteada.
 
 ---
 
@@ -129,7 +166,7 @@ Para pararlo: `Ctrl+C` y después `docker compose down`.
 dotnet test
 ```
 
-**32 tests**, con NUnit, Moq y FluentAssertions, patrón AAA (Arrange, Act, Assert) y
+**40 tests**, con NUnit, Moq y FluentAssertions, patrón AAA (Arrange, Act, Assert) y
 separados en `CasosPositivos` y `CasosNegativos`.
 
 | Qué se prueba | Nº |
@@ -139,6 +176,8 @@ separados en `CasosPositivos` y `CasosNegativos`.
 | `FunkoValidator` | 7 |
 | `RepositoryFunko` (SQLite real en memoria, sin mocks) | 8 |
 | `ServiceFunko` (repositorio y validador mockeados) | 11 |
+| `JwtService` | 2 |
+| `AuthService` (repositorio mockeado) | 6 |
 
 Los de `ServiceFunko` no solo miran lo que devuelve el método, sino a quién llama:
 si la validación falla, o el nombre ya existe, o el precio es negativo, se verifica
@@ -211,6 +250,24 @@ arrancar, no con `EnsureCreatedAsync()` (que sí es válido y es lo que usan otr
 prácticas de la unidad). Aquí se eligió así porque esta pauta pide explícitamente
 "migraciones" por su nombre.
 
+### Autenticación: enfoque manual, no Identity, sin excepciones
+
+El tema de la unidad (`16-autenticacion.md`) trae un "Reto: autenticación con JWT en
+FunkoApp" con dos enfoques (manual e Identity) y extras (OAuth2, refresh tokens, rate
+limiting). Se implementó solo el **enfoque manual** (`JwtService` + `AuthService`),
+que es lo que pide la pauta real de la práctica — Identity, OAuth2 y los extras son
+los "puntos extra" del reto, no un requisito de esta fase.
+
+Dos adaptaciones del código tal cual lo trae el tema, ambas para seguir las normas ya
+aplicadas al resto del proyecto:
+- La entidad `User` del tema lleva `[Required]`/`[MaxLength]` directamente encima.
+  Aquí se mantiene limpia (sin atributos) y esas reglas van en Fluent API, igual que
+  `FunkoEntity`/`CategoriaEntity`.
+- El tema usa `try/catch` con excepciones (`UnauthorizedAccessException`,
+  `InvalidOperationException`). Aquí `AuthService` devuelve `Result<T, DomainError>`,
+  como el resto de la aplicación — se añadieron `DomainError.Unauthorized` y
+  `DomainError.Conflict` para los dos casos nuevos.
+
 ### Por qué SQLite y no PostgreSQL (todavía)
 
 La pauta permite "PostgreSQL (o SQLite en desarrollo)". Se implementó SQLite primero,
@@ -240,6 +297,7 @@ responden correctamente desde fuera del contenedor.
 | Documentación | Swashbuckle.AspNetCore (Swagger UI en `/swagger`) |
 | Logging | Serilog (consola + fichero con rotación diaria, nivel por perfil) |
 | Persistencia | EF Core (SQLite en Dev; PostgreSQL con Npgsql, pendiente de activar) |
+| Autenticación | JWT (`Microsoft.AspNetCore.Authentication.JwtBearer`) + BCrypt (`BCrypt.Net-Next`) |
 | Inyección de dependencias | `Microsoft.Extensions.DependencyInjection` + Scrutor |
 | Contenedores | Dockerfile multi-etapa + Docker Compose |
 | Tests | NUnit + Moq + FluentAssertions |
@@ -271,7 +329,9 @@ Siguiendo la pauta de la práctica, fases que todavía no se han abordado:
 - ~~**Fase 9 — Persistencia real**~~ ✅ Hecha con SQLite: EF Core, migraciones reales
   y relación Uno a Muchos con `Categoria`. **Falta PostgreSQL** para el perfil
   Production (decisión de alcance, ver Decisiones de diseño) — aparcado a la fase 12.
-- **Fase 10 — Seguridad:** no hay JWT ni BCrypt; todas las operaciones son públicas.
+- ~~**Fase 10 — Seguridad**~~ ✅ Hecha: JWT + BCrypt, lectura pública, escritura
+  autenticada, borrado solo `ADMIN`. Enfoque manual, no Identity (ver Decisiones de
+  diseño).
 - **Fase 11 (parcial) — Tests de integración:** hay 31 tests unitarios, pero ninguno
   de integración con `WebApplicationFactory` todavía.
 - **Fase 12 (parcial) — Despliegue:** el Dockerfile multi-etapa y el `docker-compose`

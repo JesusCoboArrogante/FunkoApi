@@ -270,4 +270,47 @@ Normas de esta bitácora (ver `CLAUDE.md` en `Entorno-Servidor/`, puntos 7 y 9):
 - Tests de integración con `WebApplicationFactory` (fase 11, parcial).
 - Dos vulnerabilidades conocidas en paquetes transitivos (`SQLitePCLRaw.lib.e_sqlite3` 2.1.11, `System.Security.Cryptography.Pkcs` 9.0.0), avisadas por `dotnet build`/`dotnet add`. Son dependencias indirectas de EF Core/Npgsql en esta versión de paquetes para .NET 10; no se ha fijado una versión distinta porque podría romper la compatibilidad — queda anotado para revisar si salen versiones corregidas antes de la entrega.
 
+## Entrada 9 — `feature/auth-jwt`: fase 10 de la pauta (seguridad)
+
+**Fecha:** 2026-10-31
+
+**Antes de tocar código:** se buscó en el material de José Luis (regla 1 de `CLAUDE.md`) antes de escribir una sola línea. El tema `16-autenticacion.md` tiene justo un apartado **16.9 "Reto: autenticación con JWT en FunkoApp"**, y el 16.4 ("Enfoque manual, estilo tienda") trae el código completo: `JwtService`, `AuthService`, `AuthController`, `AuthenticationConfig`, modelo `User` con `PasswordHash`/`Role`. Se copió ese patrón.
+
+**Diferencias deliberadas frente al código literal del tema (marcadas como decisión nuestra, no como error):**
+- El tema pone `[Required]`/`[MaxLength]` directamente en la clase `User`. Nuestro `CLAUDE.md` exige "la entidad limpia de atributos, solo Fluent API" — regla que ya se aplica a `FunkoEntity`/`CategoriaEntity`. Se mantuvo esa misma regla para `UserEntity`: nada de Data Annotations en la entidad, todo en `AppDbContext.OnModelCreating`.
+- El tema usa `try/catch` con `InvalidOperationException`/`UnauthorizedAccessException` en `AuthService` y las atrapa en el controlador. Como el resto de `FunkoApp` usa `Result<T, DomainError>` (fase 6), se tradujo el mismo enfoque manual a nuestro patrón: `AuthService` devuelve `Result`, se añadieron dos tipos nuevos a `DomainError` (`Unauthorized`, `Conflict`) y una factoría `AuthErrors` paralela a `FunkoErrors`.
+- El propio tema avisa (nota al margen de 16.4.3): "en proyectos reales es preferible `IOptions<JwtOptions>`" en vez de leer `configuration["Jwt:Secret"]` suelto. Se siguió esa propia recomendación: `Config/JwtConfig.cs` con `IOptions<JwtConfig>`, igual que `DatabaseConfig`.
+- No se implementó el **enfoque Identity** (7+ tablas) ni **OAuth2** ni **refresh tokens** ni **rate limiting**: eso pertenece a los "puntos extra" del Reto (16.9) y al punto 16.6/16.5 del tema, no a la fase 10 de la pauta real de la práctica (`03-practica-api-funkos.md`), que solo pide "JWT y BCrypt... protege las operaciones de escritura: solo usuarios autenticados; el borrado, solo rol Admin". Se implementó exactamente eso, sin ampliar el alcance.
+
+**Qué se hizo:**
+1. Rama `feature/auth-jwt` desde `dev`. Paquetes `Microsoft.AspNetCore.Authentication.JwtBearer` y `BCrypt.Net-Next`.
+2. `Entity/UserEntity.cs` (limpia) + `UserRoles` (`ADMIN`/`USER`), añadida a `AppDbContext` con Fluent API e índice único en `Email`. Migración `AddUsers`.
+3. `Config/JwtConfig.cs` (`Secret`, `Issuer`, `Audience`, `ExpirationMinutes`, vía `IOptions`).
+4. `DomainError.Unauthorized`/`DomainError.Conflict` + factoría `AuthErrors`.
+5. `Dto/LoginDto.cs`, `SignupDto.cs` (con Data Annotations: email válido, contraseña mínimo 8 caracteres) y `AuthResponseDto.cs`.
+6. `Repository/IRepositoryUser.cs`/`RepositoryUser.cs`: `FindByEmailAsync`, `CreateAsync`, `UpdateAsync` — valores planos, igual que `RepositoryFunko`.
+7. `Service/JwtService.cs`: genera el JWT (claims `sub`, `email`, `username`, `role`, `jti`) firmado con HMAC-SHA256. **Sin** `ValidateToken` manual: la validación la hace el middleware `JwtBearer` (más abajo), no hace falta duplicarla.
+8. `Service/AuthService.cs`: `SignupAsync` (hashea con BCrypt, `workFactor: 11`, comprueba email duplicado) y `LoginAsync` (verifica con `BCrypt.Verify`, actualiza `LastLoginAt`). Todo en `Result<AuthResponseDto, DomainError>`.
+9. `Controller/AuthController.cs`: `POST /api/auth/signup` (201), `POST /api/auth/login` (200/401), `GET /api/auth/me` (`[Authorize]`, lee los claims del token).
+10. `Infraestructure/AuthenticationConfig.cs`: registra el esquema `JwtBearer` con `TokenValidationParameters` (emisor, audiencia, firma, expiración, `ClockSkew = Zero`) y `RoleClaimType = "role"` (para que `[Authorize(Roles = ...)]` lea el claim correcto).
+11. `FunkoController`: `[Authorize]` a nivel de clase + `[AllowAnonymous]` en `GetAll`/`GetById`/`Search` (lectura pública) + `[Authorize(Roles = UserRoles.Admin)]` en `Delete` (solo Admin).
+12. `Program.cs`: `AddAuthenticationJwt`, Swagger con botón "Authorize" (`AddSecurityDefinition`), `UseAuthentication()` antes de `UseAuthorization()` (el orden es crítico), y `UserSeeder.SeedAsync` tras la migración.
+13. `Infraestructure/UserSeeder.cs`: crea `admin@funko.com`/`admin123` (rol ADMIN) y `user@funko.com`/`user123` (rol USER) si la tabla está vacía — sin esto no habría manera de probar el rol Admin, porque el registro público siempre asigna `USER`.
+14. **Incidencia real de versión, resuelta en el momento:** `Microsoft.OpenApi` 2.x (la versión que trae `Swashbuckle.AspNetCore` 10.3.1) movió sus tipos de `Microsoft.OpenApi.Models` a `Microsoft.OpenApi` a secas, y cambió cómo se referencian los esquemas de seguridad (ya no hay `OpenApiReference`/`.Reference` tal cual los documenta la teoría, pensada para una versión anterior). Se ajustó el `using` y se simplificó a solo `AddSecurityDefinition` (el botón "Authorize" de Swagger sigue apareciendo; se dejó fuera el candado por endpoint, que no es necesario para que funcione).
+15. Verificación en tres capas, exhaustiva porque es la fase más sensible a fallos silenciosos (un 200 donde debería haber un 401 no se nota a simple vista):
+    - **Compila**: 0 errores.
+    - **Arranca**: migración `AddUsers` aplicada, *seed* de los dos usuarios.
+    - **Funciona de verdad**, con `curl` real: lectura sin token → 200 (pública); crear sin token → 401; login admin → token válido; login con contraseña incorrecta → 401; `GET /me` con token → claims correctos; crear con token de usuario normal → 201 (escribir solo exige estar autenticado); **borrar con token de usuario normal → 403** (no es Admin); borrar con token de Admin → 204; *signup* nuevo → 201; *signup* con email duplicado → 409; contraseña corta en *signup* → 400; token falsificado → 401.
+16. Tests nuevos: `JwtServiceTests` (los claims generados son correctos) y `AuthServiceTests` (alta con éxito, email duplicado, login correcto, contraseña incorrecta, email inexistente, usuario borrado) — con Moq sobre `IRepositoryUser`, sin BCrypt real de por medio salvo para fabricar el hash de prueba. **40/40 tests en verde** (32 anteriores + 8 nuevos).
+17. Cuatro commits (`feat: anadir entidad User...`, `feat: anadir JwtService...`, `feat: proteger FunkoController...`, `test: anadir tests...`), fusionados en `dev` con `--no-ff`.
+
+**Decisión tomada:** el secreto JWT vive en `appsettings.json`, en claro.
+- **Por qué:** es una práctica académica con SQLite local, no un despliegue real. Documentarlo aquí para que quede claro que en un proyecto real este valor iría a `dotnet user-secrets`, una variable de entorno o un gestor de secretos — nunca comiteado.
+- **Pendiente si se quisiera pulir:** moverlo a una variable de entorno antes de subir el repo a ningún sitio público, sobre todo si en algún momento se hace el fork a GitHub.
+
+**Qué queda pendiente:**
+- Tests de integración con `WebApplicationFactory` (fase 11, parcial) — serían el sitio natural para probar "token expirado" de verdad (con un `JwtConfig` de expiración casi inmediata) y "acceso sin token" de extremo a extremo, que con tests unitarios de servicio no se pueden cubrir del todo.
+- PostgreSQL + `docker-compose` con base de datos (fase 12, aparcado desde la fase 9).
+- README: falta añadir la sección de autenticación (endpoints, cómo probar con Swagger, credenciales de los usuarios semilla).
+
 <!-- La siguiente entrada se añade aquí, con el mismo formato: Qué se hizo / Decisión y porqué / Alternativas descartadas / Pendiente -->
