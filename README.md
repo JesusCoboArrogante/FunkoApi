@@ -2,7 +2,7 @@
 
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?style=flat-square&logo=dotnet&logoColor=white)
 ![C#](https://img.shields.io/badge/C%23-14-239120?style=flat-square&logo=csharp&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-40%20passing-2ea44f?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-53%20passing-2ea44f?style=flat-square)
 ![SQLite](https://img.shields.io/badge/EF%20Core-SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-multi--stage-2496ED?style=flat-square&logo=docker&logoColor=white)
 ![Swagger](https://img.shields.io/badge/OpenAPI-Swagger-85EA2D?style=flat-square&logo=swagger&logoColor=black)
@@ -166,7 +166,7 @@ Para pararlo: `Ctrl+C` y después `docker compose down`.
 dotnet test
 ```
 
-**40 tests**, con NUnit, Moq y FluentAssertions, patrón AAA (Arrange, Act, Assert) y
+**53 tests**, con NUnit, Moq y FluentAssertions, patrón AAA (Arrange, Act, Assert) y
 separados en `CasosPositivos` y `CasosNegativos`.
 
 | Qué se prueba | Nº |
@@ -178,6 +178,14 @@ separados en `CasosPositivos` y `CasosNegativos`.
 | `ServiceFunko` (repositorio y validador mockeados) | 11 |
 | `JwtService` | 2 |
 | `AuthService` (repositorio mockeado) | 6 |
+| `FunkoController` — integración con `WebApplicationFactory` | 8 |
+| `AuthController` — integración con `WebApplicationFactory` | 6 |
+
+Los de integración levantan la API entera (sin mocks en ningún punto) contra una
+base de datos EF Core InMemory aislada por test, y no solo miran el código de
+estado: también comprueban la **forma** del error (p. ej. que un `400` trae
+`errors` agrupados por campo, y que un `404` trae un `detail` legible) — es el
+contrato real que vería un cliente.
 
 Los de `ServiceFunko` no solo miran lo que devuelve el método, sino a quién llama:
 si la validación falla, o el nombre ya existe, o el precio es negativo, se verifica
@@ -332,8 +340,9 @@ Siguiendo la pauta de la práctica, fases que todavía no se han abordado:
 - ~~**Fase 10 — Seguridad**~~ ✅ Hecha: JWT + BCrypt, lectura pública, escritura
   autenticada, borrado solo `ADMIN`. Enfoque manual, no Identity (ver Decisiones de
   diseño).
-- **Fase 11 (parcial) — Tests de integración:** hay 31 tests unitarios, pero ninguno
-  de integración con `WebApplicationFactory` todavía.
+- ~~**Fase 11 — Tests de integración**~~ ✅ Hecha: 14 tests con `WebApplicationFactory`
+  contra un servidor real en memoria, incluida la forma de los errores. Falta solo
+  un caso de borde opcional: probar un token realmente expirado.
 - **Fase 12 (parcial) — Despliegue:** el Dockerfile multi-etapa y el `docker-compose`
   ya funcionan (puerto publicado, verificado en vivo), pero solo levantan la API; no
   hay base de datos que levantar junto a ella porque todavía no existe.

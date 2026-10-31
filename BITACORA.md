@@ -313,4 +313,37 @@ Normas de esta bitácora (ver `CLAUDE.md` en `Entorno-Servidor/`, puntos 7 y 9):
 - PostgreSQL + `docker-compose` con base de datos (fase 12, aparcado desde la fase 9).
 - README: falta añadir la sección de autenticación (endpoints, cómo probar con Swagger, credenciales de los usuarios semilla).
 
+## Entrada 10 — `feature/integration-tests`: fase 11 de la pauta (tests de integración)
+
+**Fecha:** 2026-10-31
+
+**Antes de tocar código:** se buscó en el material y apareció justo lo necesario: `28-testing.md`, apartado **28.10 "Tests de controladores con WebApplicationFactory"**, con el patrón completo (paquetes, `WebApplicationFactory<Program>` personalizada que sustituye el `DbContext`, tests con `HttpClient` real) y el 28.10.1 sobre comprobar la **forma** de los errores (`ProblemDetails` con `errors` por campo en 400, `message`/`detail` en 404/409), no solo el código de estado.
+
+**Qué se hizo:**
+1. Rama `feature/integration-tests` desde `dev`. Paquetes `Microsoft.AspNetCore.Mvc.Testing` (proyecto de tests) y `Microsoft.EntityFrameworkCore.InMemory` (proyecto de tests primero, luego también en `FunkoAppi01` — ver más abajo).
+2. `Program.cs`: añadido `public partial class Program;` al final — imprescindible porque usa Top Level Statements y `WebApplicationFactory<Program>` necesita una clase `Program` visible desde el proyecto de tests (aviso explícito del tema 28.10).
+3. `FunkoControllerIntegrationTests` y `AuthControllerIntegrationTests`: `HttpClient` real contra un servidor en memoria, sin mocks en ningún punto de la pila. Casos cubiertos: lectura pública, crear con token de usuario normal (201), borrar con token de usuario normal (403) vs. con token de Admin (204), crear sin token (401), cuerpo inválido → 400 con `ProblemDetails.errors` por campo, 404 con `detail` legible, login correcto/incorrecto, *signup*/duplicado, `/me` con y sin token.
+
+**El verdadero trabajo de este bloque — tres incidencias reales de infraestructura, resueltas en orden (y es justo lo que pide documentar la fase 5 de `CLAUDE.md`):**
+
+1. **"Varios proveedores de base de datos registrados."** El primer intento fue el de calco literal del tema: en `ConfigureWebHost`, quitar el descriptor `DbContextOptions<AppDbContext>` y volver a registrar el `AppDbContext` con `UseInMemoryDatabase`. Falló: `AddDbContext` deja más registros que ese único descriptor (los servicios internos del proveedor SQLite seguían ahí), y EF Core no admite dos proveedores a la vez en el mismo contenedor de DI.
+   - *Primer intento de arreglo:* un `IServiceProvider` interno propio para el proveedor InMemory (`UseInternalServiceProvider`, patrón oficial de Microsoft para este mismo problema). Quitó el primer error, pero sacó uno nuevo: `MigrateAsync` fallaba porque el contexto parecía "relacional" (por restos de la configuración de SQLite) pero el proveedor activo era InMemory, que no implementa `Migrate`.
+   - *Solución definitiva, más simple que las dos anteriores:* en vez de tocar los servicios de DI ya registrados, se le dio a `PersistenceConfig.AddPersistence` una tercera rama (`Provider == "InMemory"` → `UseInMemoryDatabase`), igual que ya decide entre SQLite y PostgreSQL. Los tests solo tienen que decirle a la configuración qué proveedor quieren, no desmontar nada.
+2. **El cambio de configuración no llegaba a tiempo.** Con la solución anterior, `ConfigureWebHost` cambiaba la configuración con `builder.ConfigureAppConfiguration(...)` — y los tests seguían fallando, pero de otra forma: `Create`/`Signup` con datos nuevos devolvían `409` como si el dato ya existiera. Investigando apareció un `funkos.db` **real** en la carpeta de salida de los tests: con Top Level Statements, `builder.Configuration` de `Program.cs` ya está resuelto en el momento en que se ejecuta `AddPersistence`, antes de que `ConfigureAppConfiguration` tuviera ocasión de añadir nada — así que todos los tests estaban escribiendo, sin darse cuenta, en una base SQLite real y compartida entre ejecuciones.
+   - *Arreglo:* `builder.UseSetting(...)` en vez de `ConfigureAppConfiguration`. Es el mecanismo que `WebApplicationFactory` documenta específicamente para este caso, y sí llega a tiempo.
+3. Verificación de que el arreglo era de verdad y no casualidad: se borró el `funkos.db` que había quedado de las ejecuciones fallidas, se comprobó que no volvía a aparecer, y se corrió la suite **tres veces seguidas** — 53/53 las tres veces — antes de dar el bloque por cerrado. Y se comprobó además que la aplicación real (con SQLite, `dotnet run`) seguía funcionando exactamente igual que antes, para asegurar que el nuevo proveedor "InMemory" no había roto nada fuera de los tests.
+4. Quitada la dependencia `Microsoft.EntityFrameworkCore.InMemory` del proyecto de tests una vez dejó de usarse directamente ahí (ahora vive en `FunkoAppi01`, y le llega al proyecto de tests por la referencia).
+5. Dos commits (`feat: anadir soporte de proveedor InMemory...`, `test: anadir tests de integracion...`), fusionados en `dev` con `--no-ff`.
+
+**Decisión tomada:** el proveedor "InMemory" se decide por configuración, no manipulando los servicios ya registrados en el contenedor de DI.
+- **Por qué:** es muchísimo más simple y no depende de conocer los detalles internos de cómo `AddDbContext` registra sus servicios (que además pueden cambiar entre versiones de EF Core). La propia aplicación ya sabía elegir el proveedor por configuración (SQLite/PostgreSQL); darle una tercera opción reutiliza ese mismo mecanismo en vez de inventar uno nuevo solo para tests.
+- **Alternativa descartada:** `UseInternalServiceProvider` con un `IServiceProvider` propio para el proveedor de test. Es el patrón "oficial" de Microsoft para este problema, pero aun resolviendo el primer error dejó uno nuevo (la detección de "relacional" seguía confundida) — más frágil que simplemente decirle a la configuración qué proveedor usar.
+
+**Resultado:** **53/53 tests en verde** (40 unitarios anteriores + 13 de integración nuevos), verificados en tres ejecuciones consecutivas sin fallos ni ficheros residuales.
+
+**Qué queda pendiente:**
+- PostgreSQL + `docker-compose` con base de datos (fase 12, aparcado desde la fase 9).
+- Tests de "token expirado" de verdad (necesitarían un `JwtConfig` de expiración casi inmediata en un test dedicado) — no cubierto todavía, es un caso de borde razonable para añadir si hay tiempo antes de la entrega.
+- README: añadir la sección de tests de integración.
+
 <!-- La siguiente entrada se añade aquí, con el mismo formato: Qué se hizo / Decisión y porqué / Alternativas descartadas / Pendiente -->
