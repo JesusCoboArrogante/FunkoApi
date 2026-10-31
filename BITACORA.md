@@ -184,4 +184,29 @@ Normas de esta bitácora (ver `CLAUDE.md` en `Entorno-Servidor/`, puntos 7 y 9):
 - Configuración en `appsettings` + Serilog (fase 8).
 - Persistencia EF Core (fase 9) — cuando llegue, `RepositoryFunkoTests` pasará a usar TestContainers con una base de datos real, como exige la norma.
 
+## Entrada 6 — `feature/readme`: README real y `docker compose up` comprobado de verdad
+
+**Fecha:** 2026-10-31
+
+**Antes de escribir nada:** se revisó el `README.md` de `RepositorioRemoto` para copiar su estructura (badges, tabla de endpoints, arquitectura, estructura de carpetas, cómo ejecutarlo, tests, decisiones de diseño, tecnologías, qué queda fuera).
+
+**Pregunta real resuelta con Cristian antes de escribir el README:** la pauta pide implementar el CRUD como Minimal API (fase 3) y comparar con la versión de controladores (fase 4) en el README. Partimos directamente de un proyecto que ya tenía controladores (el de Jesús), así que nunca se hizo la versión Minimal API. Cristian decidió **no hacerla** y declararlo abiertamente en el README como una omisión consciente, para priorizar el tiempo en las fases avanzadas.
+
+**Qué se hizo:**
+1. Rama `feature/readme` desde `dev`.
+2. **Antes de documentar "cómo ejecutar con Docker" se comprobó de verdad con el Docker real de la máquina** (regla 5 de `CLAUDE.md`: no se aprueba nada por "tiene buena pinta"). Resultado: `docker compose up --build` construía la imagen y el contenedor arrancaba y escuchaba bien en el 8080 **dentro** de la red de Docker (confirmado en los logs), pero **no respondía desde el host** porque `compose.yaml` no tenía ninguna sección `ports`. Es un bug real, no solo un hueco de documentación: la entrega exige explícitamente que la API sea accesible via `docker compose up`.
+3. Arreglado `compose.yaml`: añadido `ports: ["8090:8080"]` (8090 porque el 8080 de esta máquina ya estaba ocupado por otro proceso ajeno al proyecto — se comprobó con `Get-NetTCPConnection` antes de asumirlo) y `ASPNETCORE_ENVIRONMENT=Development`.
+4. Vuelto a comprobar en vivo: `docker compose up --build` → `GET /swagger/index.html` → 200, `POST /api/Funko` → 201. Confirmado desde fuera del contenedor, no solo desde dentro.
+5. Escrito `README.md` real: qué hace, tabla de los 6 endpoints (verbo/ruta/código), arquitectura con la tabla de `DomainError`→HTTP, estructura de carpetas, cómo ejecutar (local y Docker, con el aviso del puerto 8090), cómo correr los tests con el desglose por clase, y una sección de decisiones de diseño que reutiliza y resume las ya documentadas en esta bitácora (Minimal API omitida, validación en dos capas, nombre duplicado en el servicio, borrado lógico con un solo campo, repositorio síncrono, el bug del puerto). Sección final "Qué queda fuera" con las fases 3, 8, 9, 10, 11 (parcial) y 12 (parcial) de la pauta, declaradas sin rodeos.
+6. Añadida una sección "De dónde viene este proyecto" con el enlace al repo original de Jesús y un resumen de qué se corrigió, con enlace a la Entrada 0 de esta bitácora.
+7. **Incidencia de encoding, resuelta en el momento:** el `Write` inicial del README guardó el fichero en **UTF-16LE** (heredado de algún estado del editor/entorno al escribir sobre el README corrupto original de Jesús, que también estaba en UTF-16). `git commit` lo trató como binario (`0 insertions, 0 deletions` en el resumen). Se detectó revisando el propio commit, se convirtió con `iconv -f UTF-16LE -t UTF-8` y se corrigió con `git commit --amend` (permitido: el commit no se había publicado en ningún remoto). Confirmado después con `git show HEAD:README.md | file -` que el contenido guardado es UTF-8 real.
+8. Verificación: `dotnet build` (0 errores) y `dotnet test` (31/31) tras el cambio, por si el `--amend` hubiera afectado a algo (no debía, pero se comprobó).
+9. Dos commits (`fix: publicar el puerto...`, `docs: escribir el README real...`), fusionados en `dev` con `--no-ff`.
+
+**Decisión tomada:** declarar la fase 3 (Minimal API) omitida en vez de hacerla a posteriori.
+- **Por qué:** decisión de Cristian, por tiempo. Es mejor declararlo con claridad (punto 9 de `CLAUDE.md`: "es mejor declararlo tú que lo descubra [él]") que dejar que parezca un olvido.
+- **Alternativa descartada:** añadir la versión Minimal API ahora como bloque extra. Cristian prefirió seguir avanzando con las fases que faltan.
+
+**Qué queda pendiente:** todo lo que el propio README declara en su sección "Qué queda fuera" — fase 8 (config/Serilog), fase 9 (EF Core), fase 10 (JWT/BCrypt), fase 11 parcial (tests de integración con `WebApplicationFactory`) y fase 12 parcial (el `docker-compose` solo tiene la API, sin base de datos todavía porque no existe).
+
 <!-- La siguiente entrada se añade aquí, con el mismo formato: Qué se hizo / Decisión y porqué / Alternativas descartadas / Pendiente -->
