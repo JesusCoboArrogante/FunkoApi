@@ -42,4 +42,26 @@ Normas de esta bitácora (ver `CLAUDE.md` en `Entorno-Servidor/`, puntos 7 y 9):
 
 ---
 
+## Entrada 1 — `feature/fix-build`: arreglar lo que no compilaba
+
+**Fecha:** 2026-10-31
+
+**Qué se hizo:**
+1. Ramas: creada `dev` a partir de `main` (rama de trabajo por defecto, según `CLAUDE.md`), y `feature/fix-build` a partir de `dev`.
+2. `Models/Funko.cs`: añadida la propiedad `Stock` (exigida por la pauta y ausente); renombradas `CreateAt`→`CreatedAt`, `UpdateAt`→`UpdatedAt` (coinciden ahora con el nombre exacto de la pauta); sustituida `IsActivo` por `IsDeleted` (invirtiendo la condición en todo el código que la usaba); eliminada `DeleteAt` (no la pide la pauta y quedaba redundante con `IsDeleted`); añadidos valores por defecto a `Nombre`/`Categoria` para evitar warnings de nulabilidad.
+3. `Repository/RepositoryFunko.cs`: quitada la asignación a `Imagen` (la propiedad que no existía y rompía la compilación); actualizados todos los usos a los nuevos nombres; `SoftDelete` ahora marca `IsDeleted = true` en vez de rellenar una fecha que nadie leía; `Update` ahora también copia `Stock`.
+4. Verificado con `dotnet build`: **compila correctamente** (0 errores). Aparecen 2 warnings `ASP0023` por la colisión de rutas `Update`/`Patch` — es el bug nº3 del informe, ya identificado, pendiente de la fase de rutas.
+5. Al compilar se generaron `bin/`/`obj/` y se vio en vivo el problema nº10 del informe (sin `.gitignore`, binarios trackeados). Se resolvió en el mismo bloque: creado `.gitignore` (`bin/`, `obj/`, `.vs/`, `.idea/`, ficheros de usuario) y `git rm --cached` sobre lo que ya estaba versionado.
+6. Commits atómicos en `feature/fix-build`: `fix: corregir propiedades del modelo Funko y referencias rotas en el repositorio`, `chore: anadir gitignore y dejar de versionar binarios e idea`, `docs: anadir bitacora de trabajo`. Fusionados en `dev` con `--no-ff` (deja constancia del merge en el historial) y rama `feature/fix-build` borrada tras el merge.
+
+**Decisión tomada:** eliminar `DeleteAt` en vez de mantenerlo junto a `IsDeleted`.
+- **Por qué:** la pauta solo exige `IsDeleted`; mantener los dos campos obligaría a sincronizarlos siempre a la vez y es una fuente de bugs (que uno se actualice y el otro no). Un único booleano es suficiente para el borrado lógico que pide la práctica.
+- **Alternativa descartada:** conservar `DeleteAt` como fecha de auditoría. Se aparca — si en la fase de EF Core hiciera falta auditoría más fina, se puede reintroducir como campo de solo lectura, no como sustituto de `IsDeleted`.
+
+**Qué queda pendiente:**
+- El bug nº2 (controlador sin inyectar el servicio) y nº3 (rutas duplicadas, confirmado ahora también por warning del compilador) — siguiente bloque.
+- Bug nº4 (falta `Create`) y nº5 (verbos HTTP) — mismo bloque de CRUD/rutas.
+- Middleware de excepciones vacío y Swagger sin configurar — bloques posteriores.
+- `.idea/` sigue en el working directory en disco (es normal, lo genera Rider); ya no se versiona.
+
 <!-- La siguiente entrada se añade aquí, con el mismo formato: Qué se hizo / Decisión y porqué / Alternativas descartadas / Pendiente -->
