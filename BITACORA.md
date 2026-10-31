@@ -120,4 +120,38 @@ Normas de esta bitácora (ver `CLAUDE.md` en `Entorno-Servidor/`, puntos 7 y 9):
 - README real con instrucciones + justificación de decisiones (bug nº11 del informe) — sigue sin hacerse.
 - Historial de commits: ya llevamos 8 commits atómicos de fases propias desde que se retomó el proyecto, pero los 2 "first commit" de Jesús siguen en la base del historial (es correcto dejarlos, documentan de dónde partimos).
 
+## Entrada 4 — `feature/dtos-validators`: DTOs, `Result<T, DomainError>`, validador y mapper
+
+**Fecha:** 2026-10-31
+
+**Antes de tocar código:** se revisó `RepositorioRemoto/Errors/DomainError.cs`, `Validators/UserValidator.cs`, `Mappers/UserMapper.cs` y `Services/UserService.cs` para copiar exactamente su patrón (regla 1 de `CLAUDE.md`: mirar el material antes de proponer). Se confirmó: `abstract record DomainError(string Message)` con records anidados + factoría estática fuera; validador que devuelve `Result<T, DomainError>` con estilo if/return (nunca `Bind`/`Map`); mapeadores como métodos de extensión; servicio que llama al validador, comprueba duplicados contra el repositorio y traduce todo a `Result`.
+
+**Qué se hizo:**
+1. Rama `feature/dtos-validators` desde `dev`. Paquete `CSharpFunctionalExtensions` 3.7.0 (misma versión que `RepositorioRemoto`).
+2. `Errors/DomainError.cs`: `DomainError.NotFound`, `.Validation`, `.AlreadyExists` + factoría `FunkoErrors`.
+3. `Dto/CreateFunkoDto.cs`, `UpdateFunkoDto.cs`, `FunkoDto.cs`: con Data Annotations (`[Required]`, `[StringLength]`, `[Range]`), tal como pide la pauta ("Valida con Data Annotations y un validador de dominio").
+4. `Validators/IFunkoValidator.cs` + `FunkoValidator.cs`: comprueba lo que las Data Annotations no cubren bien (nombre/categoría solo con espacios).
+5. `Mappers/FunkoMapper.cs`: `ToFunko()` (desde los DTOs de entrada) y `ToDto()` (hacia el DTO de salida).
+6. `Repository`: añadido `ExistsByName(nombre, excludeId)` — sigue devolviendo un valor plano (`bool`), la regla de negocio de "nombre duplicado" la decide el servicio, no el repositorio.
+7. `ServiceFunko`/`IServiceFunko`: reescritos para trabajar con DTOs de entrada/salida y devolver `Result<T, DomainError>` en vez de lanzar excepciones. `Add`/`Update` llaman primero al validador, luego comprueban duplicados, y si todo va bien delegan en el repositorio.
+8. `FunkoController`: ya no expone el modelo de dominio, habla en DTOs; un único método privado `ToActionResult` traduce cada tipo de `DomainError` a su código HTTP (`NotFound`→404, `AlreadyExists`→409, `Validation`→400), todo como `ProblemDetails`.
+9. `Infraestructure/ValidatorsConfig.cs`: nuevo, registra `IFunkoValidator` en el contenedor DI, igual que ya existía para repositorios y servicios.
+10. Verificación en tres capas: compila (0 errores, 0 warnings); arranca sin errores; probado en vivo con `curl` — creación (201), **duplicado de nombre (409)**, nombre en blanco (400), precio negativo (400), no encontrado (404) en `GetById` y `Update`, patch de precio, borrado lógico y búsqueda.
+11. Dos commits (`feat: anadir DomainError, DTOs...` y `refactor: usar Result<T, DomainError>...`), fusionados en `dev` con `--no-ff`.
+
+**Hallazgo durante la prueba en vivo:** al mandar un nombre con solo espacios (`"   "`), la respuesta 400 vino del `ModelState` automático de `[ApiController]` (por el `[Required]`), **no** de nuestro `FunkoValidator` — resulta que `RequiredAttribute` de .NET recorta espacios antes de comprobar. Esto significa que, llamando por HTTP, el validador de dominio queda casi siempre "tapado" por las Data Annotations para ese caso concreto.
+- **Decisión tomada:** dejar las dos capas de todos modos. El validador de dominio sigue sirviendo de red de seguridad si en el futuro se llama al servicio sin pasar por el `ModelState` (por ejemplo, desde un test unitario que construye el DTO a mano, o desde otro punto de entrada que no sea HTTP). No es redundancia inútil, es defensa en profundidad — y la pauta pide explícitamente las dos técnicas.
+- **Alternativa descartada:** quitar la comprobación de blancos del validador de dominio ya que "nunca se ejecuta vía HTTP". Se descarta porque sería optimizar para un único punto de entrada y dejaría el servicio desprotegido si se usa desde otro sitio.
+
+**Decisión tomada (recordatorio de la pregunta de antes del bloque):** servicio y repositorio de Funko se quedan síncronos por ahora.
+- **Por qué:** decisión de Cristian — seguir el estilo de José Luis sin salirse del temario; como la pauta no especifica async en esta fase y el repositorio sigue sin E/S real, no hay ninguna instrucción del temario que obligue a ello todavía. Se retomará en la fase 9 (EF Core), cuando aparezca E/S real, igual que hace `RepositorioRemoto`.
+
+**Qué queda pendiente:**
+- README real con instrucciones, justificación de decisiones (bug nº11 del informe original).
+- Tests unitarios (`NUnit` + `Moq` + `FluentAssertions`, `CasosPositivos`/`CasosNegativos`) — ninguno todavía.
+- Configuración en `appsettings` + Serilog (fase 8 de la pauta).
+- Persistencia real con EF Core (fase 9) — aquí es donde se decidirá si el repositorio pasa a ser async.
+- Seguridad JWT + BCrypt (fase 10).
+- El modelo `Funko` sigue siendo mutable (`{ get; set; }`) en vez de un `record` posicional inmutable como `User` en `RepositorioRemoto` — item de estilo nº15 del informe, pendiente de limpieza cuando toquemos el modelo otra vez (probablemente en la fase de EF Core).
+
 <!-- La siguiente entrada se añade aquí, con el mismo formato: Qué se hizo / Decisión y porqué / Alternativas descartadas / Pendiente -->
