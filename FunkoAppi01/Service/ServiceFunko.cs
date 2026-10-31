@@ -4,13 +4,17 @@ using FunkoAppi01.Errors;
 using FunkoAppi01.Mappers;
 using FunkoAppi01.Repository;
 using FunkoAppi01.Validators;
+using Microsoft.Extensions.Logging;
 
 namespace FunkoAppi01.Service;
 
 /// <summary>
 /// Orquesta las reglas de negocio de Funko entre el validador y el repositorio.
 /// </summary>
-public class ServiceFunko(IRepositoryFunko repository, IFunkoValidator validator) : IServiceFunko
+public class ServiceFunko(
+    IRepositoryFunko repository,
+    IFunkoValidator validator,
+    ILogger<ServiceFunko> logger) : IServiceFunko
 {
     public IEnumerable<FunkoDto> GetAll() =>
         repository.GetAll().Select(f => f.ToDto());
@@ -30,9 +34,13 @@ public class ServiceFunko(IRepositoryFunko repository, IFunkoValidator validator
             return Result.Failure<FunkoDto, DomainError>(validacion.Error);
 
         if (repository.ExistsByName(request.Nombre))
+        {
+            logger.LogWarning("Intento de crear un Funko con nombre duplicado: {Nombre}", request.Nombre);
             return Result.Failure<FunkoDto, DomainError>(FunkoErrors.AlreadyExists(request.Nombre));
+        }
 
         var creado = repository.Add(request.ToFunko());
+        logger.LogInformation("Funko creado: {Id} - {Nombre}", creado.Id, creado.Nombre);
         return Result.Success<FunkoDto, DomainError>(creado.ToDto());
     }
 
@@ -46,8 +54,12 @@ public class ServiceFunko(IRepositoryFunko repository, IFunkoValidator validator
             return Result.Failure<FunkoDto, DomainError>(FunkoErrors.AlreadyExists(request.Nombre));
 
         if (repository.Update(id, request.ToFunko()) is not { } actualizado)
+        {
+            logger.LogWarning("Intento de actualizar un Funko inexistente: {Id}", id);
             return Result.Failure<FunkoDto, DomainError>(FunkoErrors.NotFound(id));
+        }
 
+        logger.LogInformation("Funko actualizado: {Id} - {Nombre}", actualizado.Id, actualizado.Nombre);
         return Result.Success<FunkoDto, DomainError>(actualizado.ToDto());
     }
 
@@ -66,8 +78,12 @@ public class ServiceFunko(IRepositoryFunko repository, IFunkoValidator validator
     public Result<bool, DomainError> Delete(long id)
     {
         if (!repository.SoftDelete(id))
+        {
+            logger.LogWarning("Intento de borrar un Funko inexistente: {Id}", id);
             return Result.Failure<bool, DomainError>(FunkoErrors.NotFound(id));
+        }
 
+        logger.LogInformation("Funko borrado (logico): {Id}", id);
         return Result.Success<bool, DomainError>(true);
     }
 
