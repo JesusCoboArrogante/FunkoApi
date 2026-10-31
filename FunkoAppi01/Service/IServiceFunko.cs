@@ -6,11 +6,11 @@ namespace FunkoAppi01.Service;
 
 public interface IServiceFunko
 {
-    IEnumerable<FunkoDto> GetAll();
-    Result<FunkoDto, DomainError> GetById(long id);
-    Result<FunkoDto, DomainError> Add(CreateFunkoDto request);
-    Result<FunkoDto, DomainError> Update(long id, UpdateFunkoDto request);
-    Result<FunkoDto, DomainError> UpdatePrice(long id, decimal precio);
-    Result<bool, DomainError> Delete(long id);
-    IEnumerable<FunkoDto> GetByName(string termino);
+    Task<IEnumerable<FunkoDto>> GetAllAsync();
+    Task<Result<FunkoDto, DomainError>> GetByIdAsync(long id);
+    Task<Result<FunkoDto, DomainError>> AddAsync(CreateFunkoDto request);
+    Task<Result<FunkoDto, DomainError>> UpdateAsync(long id, UpdateFunkoDto request);
+    Task<Result<FunkoDto, DomainError>> UpdatePriceAsync(long id, decimal precio);
+    Task<Result<bool, DomainError>> DeleteAsync(long id);
+    Task<IEnumerable<FunkoDto>> GetByNameAsync(string termino);
 }

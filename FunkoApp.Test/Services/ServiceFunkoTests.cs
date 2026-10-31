@@ -53,27 +53,27 @@ public class ServiceFunkoTests
     public class CasosPositivos : ServiceFunkoTests
     {
         [Test]
-        public void GetAll_DeberiaMapearTodosLosFunkos()
+        public async Task GetAllAsync_DeberiaMapearTodosLosFunkos()
         {
             // Arrange
-            _mockRepository.Setup(r => r.GetAll())
-                .Returns([CrearFunko(1, "Pikachu"), CrearFunko(2, "Charmander")]);
+            _mockRepository.Setup(r => r.GetAllAsync())
+                .ReturnsAsync([CrearFunko(1, "Pikachu"), CrearFunko(2, "Charmander")]);
 
             // Act
-            var resultado = _service.GetAll();
+            var resultado = await _service.GetAllAsync();
 
             // Assert
             resultado.Should().HaveCount(2);
         }
 
         [Test]
-        public void GetById_ExisteElFunko_DeberiaRetornarSuccess()
+        public async Task GetByIdAsync_ExisteElFunko_DeberiaRetornarSuccess()
         {
             // Arrange
-            _mockRepository.Setup(r => r.GetById(1)).Returns(CrearFunko());
+            _mockRepository.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(CrearFunko());
 
             // Act
-            var resultado = _service.GetById(1);
+            var resultado = await _service.GetByIdAsync(1);
 
             // Assert
             resultado.IsSuccess.Should().BeTrue();
@@ -81,61 +81,61 @@ public class ServiceFunkoTests
         }
 
         [Test]
-        public void Add_DatosValidos_DeberiaLlamarAlRepositorioYRetornarSuccess()
+        public async Task AddAsync_DatosValidos_DeberiaLlamarAlRepositorioYRetornarSuccess()
         {
             // Arrange
             var request = CrearCreateDto();
             _mockValidator.Setup(v => v.ValidateCreate(request))
                 .Returns(Result.Success<CreateFunkoDto, DomainError>(request));
-            _mockRepository.Setup(r => r.ExistsByName(request.Nombre, null)).Returns(false);
-            _mockRepository.Setup(r => r.Add(It.IsAny<Funko>())).Returns(CrearFunko());
+            _mockRepository.Setup(r => r.ExistsByNameAsync(request.Nombre, null)).ReturnsAsync(false);
+            _mockRepository.Setup(r => r.AddAsync(It.IsAny<Funko>())).ReturnsAsync(CrearFunko());
 
             // Act
-            var resultado = _service.Add(request);
+            var resultado = await _service.AddAsync(request);
 
             // Assert
             resultado.IsSuccess.Should().BeTrue();
-            _mockRepository.Verify(r => r.Add(It.IsAny<Funko>()), Times.Once);
+            _mockRepository.Verify(r => r.AddAsync(It.IsAny<Funko>()), Times.Once);
         }
 
         [Test]
-        public void Update_ExisteElFunko_DeberiaRetornarSuccess()
+        public async Task UpdateAsync_ExisteElFunko_DeberiaRetornarSuccess()
         {
             // Arrange
             var request = CrearUpdateDto();
             _mockValidator.Setup(v => v.ValidateUpdate(request))
                 .Returns(Result.Success<UpdateFunkoDto, DomainError>(request));
-            _mockRepository.Setup(r => r.ExistsByName(request.Nombre, 1)).Returns(false);
-            _mockRepository.Setup(r => r.Update(1, It.IsAny<Funko>())).Returns(CrearFunko());
+            _mockRepository.Setup(r => r.ExistsByNameAsync(request.Nombre, 1)).ReturnsAsync(false);
+            _mockRepository.Setup(r => r.UpdateAsync(1, It.IsAny<Funko>())).ReturnsAsync(CrearFunko());
 
             // Act
-            var resultado = _service.Update(1, request);
+            var resultado = await _service.UpdateAsync(1, request);
 
             // Assert
             resultado.IsSuccess.Should().BeTrue();
         }
 
         [Test]
-        public void UpdatePrice_ExisteElFunko_DeberiaRetornarSuccess()
+        public async Task UpdatePriceAsync_ExisteElFunko_DeberiaRetornarSuccess()
         {
             // Arrange
-            _mockRepository.Setup(r => r.UpdatePrecio(1, 25m)).Returns(CrearFunko());
+            _mockRepository.Setup(r => r.UpdatePrecioAsync(1, 25m)).ReturnsAsync(CrearFunko());
 
             // Act
-            var resultado = _service.UpdatePrice(1, 25m);
+            var resultado = await _service.UpdatePriceAsync(1, 25m);
 
             // Assert
             resultado.IsSuccess.Should().BeTrue();
         }
 
         [Test]
-        public void Delete_ExisteElFunko_DeberiaRetornarSuccess()
+        public async Task DeleteAsync_ExisteElFunko_DeberiaRetornarSuccess()
         {
             // Arrange
-            _mockRepository.Setup(r => r.SoftDelete(1)).Returns(true);
+            _mockRepository.Setup(r => r.SoftDeleteAsync(1)).ReturnsAsync(true);
 
             // Act
-            var resultado = _service.Delete(1);
+            var resultado = await _service.DeleteAsync(1);
 
             // Assert
             resultado.IsSuccess.Should().BeTrue();
@@ -147,13 +147,13 @@ public class ServiceFunkoTests
     public class CasosNegativos : ServiceFunkoTests
     {
         [Test]
-        public void GetById_NoExiste_DeberiaRetornarNotFound()
+        public async Task GetByIdAsync_NoExiste_DeberiaRetornarNotFound()
         {
             // Arrange
-            _mockRepository.Setup(r => r.GetById(99)).Returns((Funko?)null);
+            _mockRepository.Setup(r => r.GetByIdAsync(99)).ReturnsAsync((Funko?)null);
 
             // Act
-            var resultado = _service.GetById(99);
+            var resultado = await _service.GetByIdAsync(99);
 
             // Assert
             resultado.IsFailure.Should().BeTrue();
@@ -161,7 +161,7 @@ public class ServiceFunkoTests
         }
 
         [Test]
-        public void Add_ValidacionFalla_NoDeberiaLlamarAlRepositorioAdd()
+        public async Task AddAsync_ValidacionFalla_NoDeberiaLlamarAlRepositorioAdd()
         {
             // Arrange
             var request = CrearCreateDto(nombre: "");
@@ -170,44 +170,44 @@ public class ServiceFunkoTests
                     FunkoErrors.Validation(["El nombre no puede estar vacío"])));
 
             // Act
-            var resultado = _service.Add(request);
+            var resultado = await _service.AddAsync(request);
 
             // Assert
             resultado.IsFailure.Should().BeTrue();
             resultado.Error.Should().BeOfType<DomainError.Validation>();
-            _mockRepository.Verify(r => r.Add(It.IsAny<Funko>()), Times.Never);
+            _mockRepository.Verify(r => r.AddAsync(It.IsAny<Funko>()), Times.Never);
         }
 
         [Test]
-        public void Add_NombreDuplicado_NoDeberiaLlamarAlRepositorioAdd()
+        public async Task AddAsync_NombreDuplicado_NoDeberiaLlamarAlRepositorioAdd()
         {
             // Arrange
             var request = CrearCreateDto();
             _mockValidator.Setup(v => v.ValidateCreate(request))
                 .Returns(Result.Success<CreateFunkoDto, DomainError>(request));
-            _mockRepository.Setup(r => r.ExistsByName(request.Nombre, null)).Returns(true);
+            _mockRepository.Setup(r => r.ExistsByNameAsync(request.Nombre, null)).ReturnsAsync(true);
 
             // Act
-            var resultado = _service.Add(request);
+            var resultado = await _service.AddAsync(request);
 
             // Assert
             resultado.IsFailure.Should().BeTrue();
             resultado.Error.Should().BeOfType<DomainError.AlreadyExists>();
-            _mockRepository.Verify(r => r.Add(It.IsAny<Funko>()), Times.Never);
+            _mockRepository.Verify(r => r.AddAsync(It.IsAny<Funko>()), Times.Never);
         }
 
         [Test]
-        public void Update_NoExiste_DeberiaRetornarNotFound()
+        public async Task UpdateAsync_NoExiste_DeberiaRetornarNotFound()
         {
             // Arrange
             var request = CrearUpdateDto();
             _mockValidator.Setup(v => v.ValidateUpdate(request))
                 .Returns(Result.Success<UpdateFunkoDto, DomainError>(request));
-            _mockRepository.Setup(r => r.ExistsByName(request.Nombre, 99)).Returns(false);
-            _mockRepository.Setup(r => r.Update(99, It.IsAny<Funko>())).Returns((Funko?)null);
+            _mockRepository.Setup(r => r.ExistsByNameAsync(request.Nombre, 99)).ReturnsAsync(false);
+            _mockRepository.Setup(r => r.UpdateAsync(99, It.IsAny<Funko>())).ReturnsAsync((Funko?)null);
 
             // Act
-            var resultado = _service.Update(99, request);
+            var resultado = await _service.UpdateAsync(99, request);
 
             // Assert
             resultado.IsFailure.Should().BeTrue();
@@ -215,25 +215,25 @@ public class ServiceFunkoTests
         }
 
         [Test]
-        public void UpdatePrice_PrecioNegativo_NoDeberiaLlamarAlRepositorio()
+        public async Task UpdatePriceAsync_PrecioNegativo_NoDeberiaLlamarAlRepositorio()
         {
             // Act
-            var resultado = _service.UpdatePrice(1, -5m);
+            var resultado = await _service.UpdatePriceAsync(1, -5m);
 
             // Assert
             resultado.IsFailure.Should().BeTrue();
             resultado.Error.Should().BeOfType<DomainError.Validation>();
-            _mockRepository.Verify(r => r.UpdatePrecio(It.IsAny<long>(), It.IsAny<decimal>()), Times.Never);
+            _mockRepository.Verify(r => r.UpdatePrecioAsync(It.IsAny<long>(), It.IsAny<decimal>()), Times.Never);
         }
 
         [Test]
-        public void Delete_NoExiste_DeberiaRetornarNotFound()
+        public async Task DeleteAsync_NoExiste_DeberiaRetornarNotFound()
         {
             // Arrange
-            _mockRepository.Setup(r => r.SoftDelete(99)).Returns(false);
+            _mockRepository.Setup(r => r.SoftDeleteAsync(99)).ReturnsAsync(false);
 
             // Act
-            var resultado = _service.Delete(99);
+            var resultado = await _service.DeleteAsync(99);
 
             // Assert
             resultado.IsFailure.Should().BeTrue();

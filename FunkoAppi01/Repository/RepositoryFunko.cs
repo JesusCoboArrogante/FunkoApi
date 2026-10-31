@@ -1,87 +1,131 @@
-﻿using FunkoAppi01.Models;
+﻿using FunkoAppi01.Entity;
+using FunkoAppi01.Mappers;
+using FunkoAppi01.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace FunkoAppi01.Repository;
 
-public class RepositoryFunko: IRepositoryFunko
+/// <summary>
+/// Repositorio de Funko con Entity Framework Core.
+/// Funciona igual con SQLite (perfil Dev) y con PostgreSQL (perfil Prod):
+/// el proveedor se elige al registrar el AppDbContext.
+/// </summary>
+public class RepositoryFunko(AppDbContext context) : IRepositoryFunko
 {
-    private readonly Dictionary<long, Funko> _funkos = [];
-    private long _nextId = 1; 
-    public IReadOnlyList<Funko> GetAll() => Activos();
-
-    public Funko? GetById(long id) => TryGet(id);
-
-    public Funko Add(Funko funko)
+    public async Task<IReadOnlyList<Funko>> GetAllAsync()
     {
-        var nuevo = funko with
-        {
-            Id = _nextId++,
-            CreatedAt = DateTime.Now
-        };
+        var entidades = await context.Funkos
+            .Include(f => f.Categoria)
+            .AsNoTracking()
+            .OrderBy(f => f.Id)
+            .ToListAsync();
 
-        _funkos[nuevo.Id] = nuevo;
-        return nuevo;
+        return entidades.Select(f => f.ToFunko()).ToList();
     }
 
-    public Funko? Update(long id, Funko funko)
+    public async Task<Funko?> GetByIdAsync(long id)
     {
-        if (TryGet(id) is not { } existente)
-        {
-            return null;
-        }
+        var entidad = await BuscarPorId(id);
+        return entidad?.ToFunko();
+    }
 
-        var actualizar = existente with
+    public async Task<Funko> AddAsync(Funko funko)
+    {
+        var categoria = await ObtenerOCrearCategoria(funko.Categoria);
+
+        var entidad = new FunkoEntity
         {
             Nombre = funko.Nombre,
             Precio = funko.Precio,
             Stock = funko.Stock,
-            Categoria = funko.Categoria,
-            UpdatedAt = DateTime.Now
+            CategoriaId = categoria.Id,
+            Categoria = categoria,
+            CreatedAt = DateTime.Now
         };
-        _funkos[actualizar.Id] = actualizar;
-        return actualizar;
+
+        context.Funkos.Add(entidad);
+        await context.SaveChangesAsync();
+
+        return entidad.ToFunko();
     }
 
-    public bool SoftDelete(long id)
+    public async Task<Funko?> UpdateAsync(long id, Funko funko)
     {
-        if (TryGet(id) is not { } existente)
-        {
+        var entidad = await BuscarPorId(id);
+        if (entidad is null)
+            return null;
+
+        var categoria = await ObtenerOCrearCategoria(funko.Categoria);
+
+        entidad.Nombre = funko.Nombre;
+        entidad.Precio = funko.Precio;
+        entidad.Stock = funko.Stock;
+        entidad.CategoriaId = categoria.Id;
+        entidad.Categoria = categoria;
+        entidad.UpdatedAt = DateTime.Now;
+
+        await context.SaveChangesAsync();
+        return entidad.ToFunko();
+    }
+
+    public async Task<bool> SoftDeleteAsync(long id)
+    {
+        var entidad = await BuscarPorId(id);
+        if (entidad is null)
             return false;
-        }
 
-        _funkos[id] = existente with { IsDeleted = true, UpdatedAt = DateTime.Now };
+        entidad.IsDeleted = true;
+        entidad.UpdatedAt = DateTime.Now;
 
+        await context.SaveChangesAsync();
         return true;
     }
 
-    public Funko? UpdatePrecio(long id, decimal precio)
+    public async Task<Funko?> UpdatePrecioAsync(long id, decimal precio)
     {
-        if (TryGet(id) is not { } existente)
-        {
+        var entidad = await BuscarPorId(id);
+        if (entidad is null)
             return null;
-        }
 
-        var actualizar = existente with
-        {
-            Precio = precio,
-            UpdatedAt = DateTime.Now
-        };
+        entidad.Precio = precio;
+        entidad.UpdatedAt = DateTime.Now;
 
-        _funkos[actualizar.Id] = actualizar;
-        return actualizar;
+        await context.SaveChangesAsync();
+        return entidad.ToFunko();
     }
 
-    public IReadOnlyList<Funko> GetByName(string? nombre)
+    public async Task<IReadOnlyList<Funko>> GetByNameAsync(string? nombre)
     {
         var texto = nombre ?? string.Empty;
-        return Activos()
-            .Where(p => p.Nombre.Contains(texto, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(p => p.Nombre)
-            .ToList();
+
+        var entidades = await context.Funkos
+            .Include(f => f.Categoria)
+            .AsNoTracking()
+            .Where(f => f.Nombre.Contains(texto))
+            .OrderBy(f => f.Nombre)
+            .ToListAsync();
+
+        return entidades.Select(f => f.ToFunko()).ToList();
     }
 
-    public bool ExistsByName(string nombre, long? excludeId = null) =>
-        Activos().Any(p => p.Id != excludeId && p.Nombre.Equals(nombre, StringComparison.OrdinalIgnoreCase));
+    public async Task<bool> ExistsByNameAsync(string nombre, long? excludeId = null) =>
+        await context.Funkos.AnyAsync(f => f.Id != excludeId && f.Nombre.ToLower() == nombre.ToLower());
 
-    private List<Funko> Activos() => [.. _funkos.Values.Where(p => !p.IsDeleted)];
-    private  Funko? TryGet(long id) => _funkos.TryGetValue(id, out Funko? funko) && !funko.IsDeleted ? funko : null;
+    private async Task<FunkoEntity?> BuscarPorId(long id) =>
+        await context.Funkos.Include(f => f.Categoria).FirstOrDefaultAsync(f => f.Id == id);
+
+    private async Task<CategoriaEntity> ObtenerOCrearCategoria(string nombre)
+    {
+        var categoria = await context.Categorias
+            .FirstOrDefaultAsync(c => c.Nombre.ToLower() == nombre.ToLower());
+
+        if (categoria is not null)
+            return categoria;
+
+        categoria = new CategoriaEntity { Nombre = nombre };
+        context.Categorias.Add(categoria);
+        await context.SaveChangesAsync();
+
+        return categoria;
+    }
 }
