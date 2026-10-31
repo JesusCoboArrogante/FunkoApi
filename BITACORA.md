@@ -64,4 +64,31 @@ Normas de esta bitácora (ver `CLAUDE.md` en `Entorno-Servidor/`, puntos 7 y 9):
 - Middleware de excepciones vacío y Swagger sin configurar — bloques posteriores.
 - `.idea/` sigue en el working directory en disco (es normal, lo genera Rider); ya no se versiona.
 
+## Entrada 2 — `feature/controller-rest`: DI real, CRUD completo, verbos correctos
+
+**Fecha:** 2026-10-31
+
+**Qué se hizo:**
+1. Rama `feature/controller-rest` desde `dev`.
+2. Reescrito `Controller/FunkoController.cs` de cero:
+   - Recibe `IServiceFunko` por **primary constructor** (antes: `new RepositoryFunko()` en un campo `static`, que ignoraba por completo la DI y las validaciones del servicio). Ahora toda petición pasa por `ServiceFunko`.
+   - Añadido el **`Create`** que faltaba (`[HttpPost]`, devuelve `201 Created` con `CreatedAtAction`).
+   - `Update` completo ahora es **`PUT`** (antes `POST`, duplicada con el patch).
+   - Actualización de precio ahora es **`PATCH`** (antes `POST`, misma ruta que `Update` → colisión).
+   - `Search` ahora es **`GET /api/Funko/search?nombre=...`** (antes `POST`, no tenía sentido como búsqueda de solo lectura).
+3. Verificación en tres capas:
+   - **Compila**: `dotnet build` → 0 errores, 0 warnings (han desaparecido los `ASP0023` de rutas duplicadas).
+   - **Arranca**: `dotnet run` levanta en `http://localhost:5050` sin errores.
+   - **Funciona de verdad**: probado con `curl` el ciclo completo — crear (201), listar, consultar por id, actualizar completo (PUT), actualizar precio (PATCH), buscar por nombre, borrar (204, borrado lógico) y comprobar que tras el borrado el GET devuelve 404. Todo correcto.
+4. Un commit atómico (`fix: inyectar IServiceFunko en el controlador y completar el CRUD con los verbos correctos`), fusionado en `dev` con `--no-ff`, rama borrada.
+
+**Decisión tomada:** el body de `UpdatePrice` (PATCH) se recibe como `decimal` plano en el body, no como un diccionario genérico (`Dictionary<string, object>`, que era como lo tenía Jesús).
+- **Por qué:** el diccionario genérico obligaba a mirar claves por string (`"Precio"`) y castear `JsonElement` a mano — frágil y sin tipado. Al ser un único campo, un `decimal` en el body es más simple y sigue el principio de "si él no usa una técnica más compleja sin necesidad, nosotros tampoco la metemos".
+- **Alternativa descartada:** mantener el patch genérico tipo JSON Patch (RFC 6902). Se descarta por ahora porque la pauta no lo pide explícitamente y añadiría complejidad que no toca en esta fase.
+
+**Qué queda pendiente:**
+- El `Service.Add`/`Update` siguen lanzando `ArgumentException` en validaciones (nombre vacío, precio negativo) y **no hay middleware que las capture** — de momento esas peticiones devuelven un 500 crudo en vez de un `ProblemDetails` 400. Es el bug nº7 del informe, siguiente bloque.
+- Swagger sigue sin configurar (bug nº8).
+- DTOs de entrada/salida (fase 7 de la pauta) — por ahora el controlador expone el propio `Funko` de dominio, aceptable en esta fase pero a corregir antes de EF Core.
+
 <!-- La siguiente entrada se añade aquí, con el mismo formato: Qué se hizo / Decisión y porqué / Alternativas descartadas / Pendiente -->
