@@ -209,4 +209,27 @@ Normas de esta bitácora (ver `CLAUDE.md` en `Entorno-Servidor/`, puntos 7 y 9):
 
 **Qué queda pendiente:** todo lo que el propio README declara en su sección "Qué queda fuera" — fase 8 (config/Serilog), fase 9 (EF Core), fase 10 (JWT/BCrypt), fase 11 parcial (tests de integración con `WebApplicationFactory`) y fase 12 parcial (el `docker-compose` solo tiene la API, sin base de datos todavía porque no existe).
 
+## Entrada 7 — `feature/config-serilog`: fase 8 de la pauta (configuración + logs)
+
+**Fecha:** 2026-10-31
+
+**Antes de tocar código:** se revisó `RepositorioRemoto/Config/ApiConfig.cs` (clase por sección + `SectionName` + `IOptions<T>`) y cómo configura Serilog en `Program.cs` (consola + fichero con rotación diaria). Como ahí es una app de consola con `ConfigurationBuilder` manual y aquí es una Web API, se adaptó al modo idiomático de ASP.NET Core (`builder.Host.UseSerilog(...)` leyendo la sección `Serilog` del `appsettings.json` vía `Serilog.Settings.Configuration`), que es la misma librería y el mismo resultado, solo con el mecanismo de arranque propio de un proyecto Web.
+
+**Qué se hizo:**
+1. Rama `feature/config-serilog` desde `dev`. Paquetes `Serilog.AspNetCore`, `Serilog.Sinks.File`, `Serilog.Settings.Configuration`.
+2. `appsettings.json`: sección `Serilog` con `MinimumLevel` (Information, overrides a Warning para Microsoft/System) y dos sinks (`Console` y `File` con `rollingInterval: Day`, en `logs/funkoapp-.log`).
+3. `appsettings.Development.json`: override del nivel mínimo a `Debug` — perfil por entorno, tal como pide la pauta.
+4. `Program.cs`: `builder.Host.UseSerilog(...)` leyendo la configuración, y `app.UseSerilogRequestLogging()` para que cada petición HTTP quede registrada (método, ruta, código, duración) sin tener que escribirlo a mano.
+5. `ServiceFunko`: añadido `ILogger<ServiceFunko>` al constructor primario. Log estructurado en las operaciones CRUD: `LogInformation` al crear/actualizar/borrar con éxito, `LogWarning` en los tres casos de fallo de negocio (nombre duplicado, no encontrado al actualizar, no encontrado al borrar).
+6. Ajustado `ServiceFunkoTests.cs`: el constructor de `ServiceFunko` cambió (un parámetro más), así que el `SetUp` pasa un `Mock<ILogger<ServiceFunko>>().Object`.
+7. `.gitignore`: añadida la carpeta `logs/` (igual que se hizo con `bin`/`obj` en el bloque 1 — no tiene sentido versionar ficheros de log).
+8. Verificación en tres capas: `dotnet build` (0 errores) y `dotnet test` (31/31) tras el cambio de constructor; arrancado de verdad con `dotnet run` y comprobado el fichero `logs/funkoapp-AAAAMMDD.log` generado: aparecen tanto las líneas de `UseSerilogRequestLogging` (`HTTP POST /api/Funko responded 201 in 77 ms`) como las propias (`Funko creado: 1 - Jigglypuff`, y los `[WRN]` al crear un duplicado o borrar un id inexistente).
+9. Dos commits (`feat: configurar Serilog...`, `feat: anadir log estructurado...`), fusionados en `dev` con `--no-ff`.
+
+**Decisión tomada:** no crear una clase `Config/` + `IOptions<T>` propia para Serilog.
+- **Por qué:** Serilog ya tiene su propio mecanismo de lectura de configuración (`Serilog.Settings.Configuration` + `ReadFrom.Configuration`), que es el estándar de la librería y el que de hecho se documenta en su propia web. Forzar una clase `Config/SerilogConfig.cs` solo para envolver eso sería maquinaria de más sin ningún beneficio — y el propio `RepositorioRemoto` tampoco usa `IOptions<T>` para Serilog, lo configura directamente en código.
+- **Alternativa descartada:** seguir el patrón de `Config/` + `IOptions<T>` también para Serilog, por pura simetría con el resto del proyecto. Se descarta porque sería forzar un patrón donde la propia herramienta ya da uno mejor.
+
+**Qué queda pendiente:** fase 9 (EF Core — aquí sí aparecerán clases `Config/` propias para la cadena de conexión, con `IOptions<T>`, siguiendo el patrón de `DatabaseConfig` de `RepositorioRemoto`), fase 10 (JWT/BCrypt), fase 11 (tests de integración), fase 12 (docker-compose con base de datos).
+
 <!-- La siguiente entrada se añade aquí, con el mismo formato: Qué se hizo / Decisión y porqué / Alternativas descartadas / Pendiente -->

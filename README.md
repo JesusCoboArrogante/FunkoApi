@@ -205,6 +205,7 @@ responden correctamente desde fuera del contenedor.
 | API REST | ASP.NET Core con controladores |
 | Errores sin excepciones | CSharpFunctionalExtensions (`Result<T, DomainError>`) |
 | Documentación | Swashbuckle.AspNetCore (Swagger UI en `/swagger`) |
+| Logging | Serilog (consola + fichero con rotación diaria, nivel por perfil) |
 | Inyección de dependencias | `Microsoft.Extensions.DependencyInjection` + Scrutor |
 | Contenedores | Dockerfile multi-etapa + Docker Compose |
 | Tests | NUnit + Moq + FluentAssertions |
@@ -230,9 +231,9 @@ Siguiendo la pauta de la práctica, fases que todavía no se han abordado:
 
 - **Fase 3 (Minimal API):** omitida a propósito, ver
   [Decisiones de diseño](#-decisiones-de-diseño).
-- **Fase 8 — Configuración y logs:** la configuración sigue en el `appsettings.json`
-  por defecto de la plantilla; falta Serilog con log estructurado de las operaciones
-  CRUD.
+- ~~**Fase 8 — Configuración y logs**~~ ✅ Hecha: Serilog a consola y fichero (rotación
+  diaria), nivel configurable por perfil (`appsettings.json`/`appsettings.Development.json`)
+  y log estructurado de crear/actualizar/borrar en `ServiceFunko`.
 - **Fase 9 — Persistencia real:** el repositorio sigue en memoria (`Dictionary`). Falta
   EF Core con PostgreSQL/SQLite, la relación con `Categoria` y las migraciones.
 - **Fase 10 — Seguridad:** no hay JWT ni BCrypt; todas las operaciones son públicas.
