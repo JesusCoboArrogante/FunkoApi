@@ -1,21 +1,31 @@
 ﻿using CSharpFunctionalExtensions;
 using FunkoAppi01.Dto;
+using FunkoAppi01.Entity;
 using FunkoAppi01.Errors;
 using FunkoAppi01.Service;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FunkoAppi01.Controller;
 
+/// <summary>
+/// CRUD de Funkos. La lectura es pública; escribir exige estar autenticado y
+/// borrar exige además el rol Admin.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class FunkoController(IServiceFunko service) : ControllerBase
 {
+    [AllowAnonymous]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<FunkoDto>>> GetAll() => Ok(await service.GetAllAsync());
 
+    [AllowAnonymous]
     [HttpGet("{id:long}")]
     public async Task<ActionResult<FunkoDto>> GetById(long id) => ToActionResult(await service.GetByIdAsync(id));
 
+    [AllowAnonymous]
     [HttpGet("search")]
     public async Task<ActionResult<IEnumerable<FunkoDto>>> Search([FromQuery] string? nombre) =>
         Ok(await service.GetByNameAsync(nombre ?? string.Empty));
@@ -37,6 +47,7 @@ public class FunkoController(IServiceFunko service) : ControllerBase
     public async Task<ActionResult<FunkoDto>> UpdatePrice(long id, [FromBody] decimal precio) =>
         ToActionResult(await service.UpdatePriceAsync(id, precio));
 
+    [Authorize(Roles = UserRoles.Admin)]
     [HttpDelete("{id:long}")]
     public async Task<ActionResult> Delete(long id)
     {
