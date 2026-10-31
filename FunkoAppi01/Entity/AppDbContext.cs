@@ -10,6 +10,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<FunkoEntity> Funkos => Set<FunkoEntity>();
     public DbSet<CategoriaEntity> Categorias => Set<CategoriaEntity>();
+    public DbSet<UserEntity> Users => Set<UserEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -45,6 +46,23 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             // Los Funkos borrados siguen en la tabla (borrado lógico); por defecto se ocultan.
             entity.HasQueryFilter(f => !f.IsDeleted);
+        });
+
+        modelBuilder.Entity<UserEntity>(entity =>
+        {
+            entity.ToTable("users");
+
+            entity.HasKey(u => u.Id);
+
+            entity.Property(u => u.Username).HasColumnName("username").HasMaxLength(100).IsRequired();
+            entity.Property(u => u.Email).HasColumnName("email").HasMaxLength(255).IsRequired();
+            entity.Property(u => u.PasswordHash).HasColumnName("password_hash").HasMaxLength(255).IsRequired();
+            entity.Property(u => u.Role).HasColumnName("role").HasMaxLength(50).IsRequired();
+            entity.Property(u => u.IsDeleted).HasColumnName("is_deleted");
+            entity.Property(u => u.CreatedAt).HasColumnName("created_at");
+            entity.Property(u => u.LastLoginAt).HasColumnName("last_login_at");
+
+            entity.HasIndex(u => u.Email).IsUnique();
         });
     }
 }
