@@ -6,6 +6,7 @@ using FunkoAppi01.Models;
 using FunkoAppi01.Repository;
 using FunkoAppi01.Service;
 using FunkoAppi01.Validators;
+using Microsoft.Extensions.Logging;
 using Moq;
 using NUnit.Framework;
 
@@ -26,7 +27,10 @@ public class ServiceFunkoTests
     {
         _mockRepository = new Mock<IRepositoryFunko>();
         _mockValidator = new Mock<IFunkoValidator>();
-        _service = new ServiceFunko(_mockRepository.Object, _mockValidator.Object);
+        _service = new ServiceFunko(
+            _mockRepository.Object,
+            _mockValidator.Object,
+            new Mock<ILogger<ServiceFunko>>().Object);
     }
 
     private static Funko CrearFunko(long id = 1, string nombre = "Pikachu") => new()
