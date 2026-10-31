@@ -346,4 +346,30 @@ Normas de esta bitácora (ver `CLAUDE.md` en `Entorno-Servidor/`, puntos 7 y 9):
 - Tests de "token expirado" de verdad (necesitarían un `JwtConfig` de expiración casi inmediata en un test dedicado) — no cubierto todavía, es un caso de borde razonable para añadir si hay tiempo antes de la entrega.
 - README: añadir la sección de tests de integración.
 
+## Entrada 11 — `feature/postgres`: fase 12 de la pauta (PostgreSQL + Docker)
+
+**Fecha:** 2026-10-31
+
+**Antes de tocar código:** se revisó `RepositorioRemoto/docker-compose.yml` (servicio Postgres con `healthcheck` + `depends_on: condition: service_healthy`, variables de entorno con `__` para sobrescribir `appsettings`, perfil Production) y su `appsettings.Production.json`. Se copió esa misma estructura.
+
+**Qué se hizo, y sobre todo qué falló al comprobarlo de verdad (regla 5 de `CLAUDE.md`: nada se aprueba sin ejecutarlo) — esta fase fue la que más "verificación en tres capas" necesitó de todo el proyecto:**
+
+1. `appsettings.Production.json` (`DatabaseSettings.Provider = PostgreSQL`) y `compose.yaml` con un servicio `postgres` (imagen `postgres:16-alpine`, `healthcheck` con `pg_isready`, volumen persistente) + `funkoappi01` esperando a `service_healthy` y con `ASPNETCORE_ENVIRONMENT=Production`.
+2. **Primer fallo real:** `docker compose up` no arrancaba — puerto `5432` ya ocupado por otro Postgres de la propia máquina de desarrollo (nada que ver con el proyecto). Se remapeó a `5433:5432`.
+3. **Segundo fallo real:** con Postgres arriba y sano, la app moría al aplicar las migraciones: `PendingModelChangesWarning`. Las migraciones de este repo se generaron con SQLite como proveedor activo; EF Core detecta que el modelo no coincide exactamente al validarlas contra PostgreSQL (los dos motores difieren en cómo mapean tipos por defecto). Mantener dos historiales de migración en paralelo (uno por proveedor) es la solución "correcta" pero no compensa el esfuerzo en esta fase — se decidió que PostgreSQL cree el esquema con `EnsureCreatedAsync` (desde el modelo actual, sin pasar por el historial de migraciones), y que SQLite siga con `MigrateAsync` de verdad (que es lo que pedía explícitamente la fase 9). `Program.cs` decide por `db.Database.ProviderName`.
+4. **Tercer fallo real**, ya con `EnsureCreated` funcionando para crear las tablas: el índice único filtrado de `FunkoEntity.Nombre` usaba `"is_deleted" = 0` (sintaxis de SQLite, donde el booleano se guarda como entero); PostgreSQL con su tipo `boolean` real no admite comparar `boolean = integer` y la creación del esquema fallaba. Cambiado a `"is_deleted" = FALSE` (válido en los dos motores) y regenerada la migración de SQLite (`FixDeletedFilterPortable`) para que su historial siga coincidiendo con el modelo.
+5. **Cuarto fallo real**, ya con el esquema creado: el *seed* de usuarios fallaba al guardar — `Cannot write DateTime with Kind=Local to PostgreSQL type 'timestamp with time zone', only UTC is supported`. Todo el código usaba `DateTime.Now` (hora local); Npgsql exige UTC para ese tipo de columna. Cambiado a `DateTime.UtcNow` en `RepositoryFunko`, `AuthService` y `UserSeeder` — además de arreglar Postgres, es la práctica correcta en cualquier proveedor (guardar en UTC, convertir a local solo al mostrar).
+6. Con los cuatro fallos resueltos, verificación de verdad completa contra PostgreSQL real (no solo "arranca"): login, crear (201), nombre duplicado (409, confirma que la categoría y el índice único funcionan de verdad en Postgres), listar, borrar (204). Y, para no romper lo que ya funcionaba, se repitió la misma prueba contra **SQLite** (perfil normal, `dotnet run`) después de todos estos cambios: sigue funcionando igual.
+7. Tres commits (`fix: usar DateTime.UtcNow...`, `fix: hacer portable...`, `feat: activar PostgreSQL...`), fusionados en `dev` con `--no-ff`.
+
+**Decisión tomada:** PostgreSQL usa `EnsureCreated`, no el historial de migraciones de SQLite.
+- **Por qué:** los dos proveedores no comparten exactamente el mismo modelo generado (tipos, longitudes, defaults), y EF Core lo detecta y lo bloquea como medida de seguridad (`PendingModelChangesWarning`). Mantener una segunda carpeta de migraciones solo para Postgres es la solución "de libro", pero añade mantenimiento doble sin ningún beneficio real a estas alturas del curso.
+- **Alternativa descartada:** una segunda carpeta de migraciones específica para PostgreSQL (`MigrationsAssembly` separado). Queda anotada como posible mejora si en algún momento se necesitara evolucionar el esquema en producción de forma controlada; para esta práctica no compensa.
+
+**Resultado:** 53/53 tests siguen en verde (no afectados, usan SQLite/InMemory), y **PostgreSQL funciona de verdad** dentro de Docker: esquema, relación con categoría, índice único, JWT, todo probado en vivo.
+
+**Qué queda pendiente:**
+- README: añadir cómo levantar el perfil Production con `docker compose up`.
+- Nada más de la pauta original queda sin abordar salvo la fase 3 (Minimal API, omitida a propósito desde el bloque del README) y el caso de borde de "token expirado" de verdad (fase 11, opcional).
+
 <!-- La siguiente entrada se añade aquí, con el mismo formato: Qué se hizo / Decisión y porqué / Alternativas descartadas / Pendiente -->

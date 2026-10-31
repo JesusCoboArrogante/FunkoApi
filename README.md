@@ -4,6 +4,7 @@
 ![C#](https://img.shields.io/badge/C%23-14-239120?style=flat-square&logo=csharp&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-53%20passing-2ea44f?style=flat-square)
 ![SQLite](https://img.shields.io/badge/EF%20Core-SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-multi--stage-2496ED?style=flat-square&logo=docker&logoColor=white)
 ![Swagger](https://img.shields.io/badge/OpenAPI-Swagger-85EA2D?style=flat-square&logo=swagger&logoColor=black)
 ![JWT](https://img.shields.io/badge/Auth-JWT%20%2B%20BCrypt-000000?style=flat-square&logo=jsonwebtokens&logoColor=white)
@@ -41,7 +42,7 @@ errores de dominio sin excepciones, documentación Swagger y despliegue con Dock
 ```
 Program.cs → FunkoController → ServiceFunko → FunkoValidator
                                              → RepositoryFunko   (EF Core, async)
-                                                   → AppDbContext → SQLite (Dev) / PostgreSQL (Prod, pendiente)
+                                                   → AppDbContext → SQLite (Dev) / PostgreSQL (Prod)
 ```
 
 El controlador no conoce el repositorio ni el modelo de dominio: solo habla con
@@ -143,20 +144,24 @@ dotnet run --project FunkoAppi01
 Arranca en `http://localhost:5230` (o el puerto que asigne `dotnet run`). La
 documentación interactiva está en `http://localhost:5230/swagger`.
 
-### Con Docker
+### Con Docker (API + PostgreSQL)
 
 ```bash
 docker compose up --build
 ```
 
-Publica la API en `http://localhost:8090` (Swagger en `http://localhost:8090/swagger`).
-Para pararlo: `Ctrl+C` y después `docker compose down`.
+Levanta **PostgreSQL** (perfil Production) y la API, que espera a que la base de
+datos esté realmente lista (`healthcheck` + `depends_on: condition: service_healthy`)
+antes de arrancar. Publica la API en `http://localhost:8090` (Swagger en
+`http://localhost:8090/swagger`) y PostgreSQL en `localhost:5433`.
+Para pararlo: `Ctrl+C` y después `docker compose down` (añade `-v` para borrar
+también los datos de Postgres).
 
 > [!NOTE]
-> El puerto del host es **8090**, no 8080: en la máquina de desarrollo el 8080 ya
-> estaba ocupado por otro proceso ajeno al proyecto, y de paso probamos que el
-> contenedor no respondía porque `compose.yaml` no publicaba ningún puerto. Ver
-> [Decisiones de diseño](#-decisiones-de-diseño).
+> Los puertos del host son **8090** y **5433**, no 8080/5432: en la máquina de
+> desarrollo esos puertos ya estaban ocupados por procesos ajenos al proyecto —
+> de hecho, así se descubrió que el `compose.yaml` original no publicaba ningún
+> puerto en absoluto. Ver [Decisiones de diseño](#-decisiones-de-diseño).
 
 ---
 
@@ -276,13 +281,22 @@ aplicadas al resto del proyecto:
   como el resto de la aplicación — se añadieron `DomainError.Unauthorized` y
   `DomainError.Conflict` para los dos casos nuevos.
 
-### Por qué SQLite y no PostgreSQL (todavía)
+### SQLite con migraciones reales, PostgreSQL con `EnsureCreated`
 
-La pauta permite "PostgreSQL (o SQLite en desarrollo)". Se implementó SQLite primero,
-con migraciones reales y probado también dentro de Docker, para no disparar el
-bloque de trabajo de esta fase. El paquete de PostgreSQL (Npgsql) ya está instalado
-y el código elige el proveedor según `DatabaseSettings:Provider`; activarlo del todo
-(con su propio `docker-compose` y perfil Production) queda para la fase 12.
+Las migraciones versionadas en el repo se generaron con SQLite como proveedor activo.
+Al activar PostgreSQL, EF Core detectó que el modelo no coincide exactamente entre
+los dos motores y bloqueó la migración (`PendingModelChangesWarning`). Mantener dos
+historiales de migración en paralelo es la solución "de libro", pero no compensa el
+esfuerzo en esta fase: PostgreSQL crea el esquema directamente desde el modelo actual
+con `EnsureCreatedAsync`, y SQLite sigue con `MigrateAsync` de verdad (que es lo que
+pedía explícitamente la fase 9). `Program.cs` decide según el proveedor activo.
+
+### Fechas siempre en UTC
+
+Activar PostgreSQL destapó un bug que SQLite nunca habría mostrado: el código
+guardaba `DateTime.Now` (hora local), y Npgsql exige UTC para sus columnas
+`timestamp with time zone`. Se cambió a `DateTime.UtcNow` en todo el proyecto — más
+allá de arreglar Postgres, es la práctica correcta en cualquier base de datos.
 
 ### El puerto del contenedor no estaba publicado
 
@@ -304,7 +318,7 @@ responden correctamente desde fuera del contenedor.
 | Errores sin excepciones | CSharpFunctionalExtensions (`Result<T, DomainError>`) |
 | Documentación | Swashbuckle.AspNetCore (Swagger UI en `/swagger`) |
 | Logging | Serilog (consola + fichero con rotación diaria, nivel por perfil) |
-| Persistencia | EF Core (SQLite en Dev; PostgreSQL con Npgsql, pendiente de activar) |
+| Persistencia | EF Core (SQLite en Dev con migraciones; PostgreSQL en Production con Npgsql) |
 | Autenticación | JWT (`Microsoft.AspNetCore.Authentication.JwtBearer`) + BCrypt (`BCrypt.Net-Next`) |
 | Inyección de dependencias | `Microsoft.Extensions.DependencyInjection` + Scrutor |
 | Contenedores | Dockerfile multi-etapa + Docker Compose |
@@ -325,24 +339,19 @@ está en la Entrada 0 de la bitácora.
 
 ---
 
-## 🚧 Qué queda fuera (por ahora)
+## 🚧 Qué queda fuera
 
-Siguiendo la pauta de la práctica, fases que todavía no se han abordado:
+De las 12 fases de la pauta, 11 están hechas. Solo queda fuera, a propósito:
 
-- **Fase 3 (Minimal API):** omitida a propósito, ver
-  [Decisiones de diseño](#-decisiones-de-diseño).
-- ~~**Fase 8 — Configuración y logs**~~ ✅ Hecha: Serilog a consola y fichero (rotación
-  diaria), nivel configurable por perfil (`appsettings.json`/`appsettings.Development.json`)
-  y log estructurado de crear/actualizar/borrar en `ServiceFunko`.
-- ~~**Fase 9 — Persistencia real**~~ ✅ Hecha con SQLite: EF Core, migraciones reales
-  y relación Uno a Muchos con `Categoria`. **Falta PostgreSQL** para el perfil
-  Production (decisión de alcance, ver Decisiones de diseño) — aparcado a la fase 12.
-- ~~**Fase 10 — Seguridad**~~ ✅ Hecha: JWT + BCrypt, lectura pública, escritura
-  autenticada, borrado solo `ADMIN`. Enfoque manual, no Identity (ver Decisiones de
-  diseño).
-- ~~**Fase 11 — Tests de integración**~~ ✅ Hecha: 14 tests con `WebApplicationFactory`
-  contra un servidor real en memoria, incluida la forma de los errores. Falta solo
-  un caso de borde opcional: probar un token realmente expirado.
-- **Fase 12 (parcial) — Despliegue:** el Dockerfile multi-etapa y el `docker-compose`
-  ya funcionan (puerto publicado, verificado en vivo), pero solo levantan la API; no
-  hay base de datos que levantar junto a ella porque todavía no existe.
+- **Fase 3 (Minimal API):** no se hizo la versión aparte en Minimal API para
+  compararla con los controladores, como pedía la fase 4 — se partió de un proyecto
+  que ya tenía controladores. Ver [Decisiones de diseño](#-decisiones-de-diseño).
+
+Y un único caso de borde opcional dentro de la fase 11 (tests de integración): no
+hay un test dedicado que fuerce un token JWT realmente expirado (requeriría un
+`JwtConfig` de expiración casi inmediata solo para ese test); sí está probado que un
+token ausente o falsificado se rechaza con `401`.
+
+Todo lo demás —persistencia real con migraciones, relación Uno a Muchos, JWT +
+BCrypt, tests unitarios y de integración, Docker con PostgreSQL— está hecho y
+verificado en vivo, no solo "compila".
