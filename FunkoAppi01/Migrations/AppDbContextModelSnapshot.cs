@@ -78,7 +78,7 @@ namespace FunkoAppi01.Migrations
 
                     b.HasIndex("Nombre")
                         .IsUnique()
-                        .HasFilter("\"is_deleted\" = 0");
+                        .HasFilter("\"is_deleted\" = FALSE");
 
                     b.ToTable("funkos", (string)null);
                 });

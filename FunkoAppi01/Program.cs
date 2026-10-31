@@ -45,9 +45,13 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // El proveedor InMemory (tests de integracion con WebApplicationFactory) no
-    // soporta migraciones; solo SQLite/PostgreSQL (relacionales) las necesitan.
-    if (db.Database.IsRelational())
+    // Las migraciones versionadas en el repo se generaron con SQLite como proveedor
+    // activo; aplicarlas contra PostgreSQL dispara "pending model changes" porque el
+    // modelo no coincide exactamente entre proveedores. Mantener dos historiales de
+    // migracion en paralelo no compensa en esta fase: PostgreSQL crea el esquema
+    // directamente desde el modelo actual con EnsureCreated. InMemory (tests de
+    // integracion) tampoco soporta migraciones.
+    if (db.Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
         await db.Database.MigrateAsync();
     else
         await db.Database.EnsureCreatedAsync();

@@ -37,7 +37,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(f => f.CreatedAt).HasColumnName("created_at");
             entity.Property(f => f.UpdatedAt).HasColumnName("updated_at");
 
-            entity.HasIndex(f => f.Nombre).IsUnique().HasFilter("\"is_deleted\" = 0");
+            // "FALSE" en vez de "0": SQLite lo acepta desde la 3.23 y es la unica
+            // forma de comparar con una columna boolean en PostgreSQL (que no admite
+            // comparar boolean con integer).
+            entity.HasIndex(f => f.Nombre).IsUnique().HasFilter("\"is_deleted\" = FALSE");
 
             entity.HasOne(f => f.Categoria)
                 .WithMany(c => c.Funkos)

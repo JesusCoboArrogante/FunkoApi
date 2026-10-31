@@ -22,7 +22,7 @@ public static class UserSeeder
                 Email = "admin@funko.com",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123", 11),
                 Role = UserRoles.Admin,
-                CreatedAt = DateTime.Now
+                CreatedAt = DateTime.UtcNow
             },
             new UserEntity
             {
@@ -30,7 +30,7 @@ public static class UserSeeder
                 Email = "user@funko.com",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("user123", 11),
                 Role = UserRoles.User,
-                CreatedAt = DateTime.Now
+                CreatedAt = DateTime.UtcNow
             });
 
         await context.SaveChangesAsync();

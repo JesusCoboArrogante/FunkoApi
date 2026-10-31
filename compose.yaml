@@ -1,10 +1,34 @@
 ﻿services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: funkoapp-postgres
+    environment:
+      POSTGRES_DB: funkos
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d funkos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   funkoappi01:
     image: funkoappi01
     build:
       context: .
       dockerfile: FunkoAppi01/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "8090:8080"
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_ENVIRONMENT=Production
+      - DatabaseSettings__ConnectionString=Host=postgres;Port=5432;Database=funkos;Username=postgres;Password=postgres
+
+volumes:
+  postgres_data:

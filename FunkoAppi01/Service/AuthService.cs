@@ -29,7 +29,7 @@ public class AuthService(
             Email = request.Email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password, BCryptWorkFactor),
             Role = UserRoles.User,
-            CreatedAt = DateTime.Now
+            CreatedAt = DateTime.UtcNow
         };
 
         user = await repository.CreateAsync(user);
@@ -48,7 +48,7 @@ public class AuthService(
                 AuthErrors.Unauthorized("Credenciales inválidas"));
         }
 
-        user.LastLoginAt = DateTime.Now;
+        user.LastLoginAt = DateTime.UtcNow;
         await repository.UpdateAsync(user);
 
         logger.LogInformation("Login correcto: {Id} ({Username})", user.Id, user.Username);

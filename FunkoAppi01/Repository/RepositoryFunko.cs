@@ -40,7 +40,7 @@ public class RepositoryFunko(AppDbContext context) : IRepositoryFunko
             Stock = funko.Stock,
             CategoriaId = categoria.Id,
             Categoria = categoria,
-            CreatedAt = DateTime.Now
+            CreatedAt = DateTime.UtcNow
         };
 
         context.Funkos.Add(entidad);
@@ -62,7 +62,7 @@ public class RepositoryFunko(AppDbContext context) : IRepositoryFunko
         entidad.Stock = funko.Stock;
         entidad.CategoriaId = categoria.Id;
         entidad.Categoria = categoria;
-        entidad.UpdatedAt = DateTime.Now;
+        entidad.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
         return entidad.ToFunko();
@@ -75,7 +75,7 @@ public class RepositoryFunko(AppDbContext context) : IRepositoryFunko
             return false;
 
         entidad.IsDeleted = true;
-        entidad.UpdatedAt = DateTime.Now;
+        entidad.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
         return true;
@@ -88,7 +88,7 @@ public class RepositoryFunko(AppDbContext context) : IRepositoryFunko
             return null;
 
         entidad.Precio = precio;
-        entidad.UpdatedAt = DateTime.Now;
+        entidad.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
         return entidad.ToFunko();
