@@ -154,4 +154,34 @@ Normas de esta bitácora (ver `CLAUDE.md` en `Entorno-Servidor/`, puntos 7 y 9):
 - Seguridad JWT + BCrypt (fase 10).
 - El modelo `Funko` sigue siendo mutable (`{ get; set; }`) en vez de un `record` posicional inmutable como `User` en `RepositorioRemoto` — item de estilo nº15 del informe, pendiente de limpieza cuando toquemos el modelo otra vez (probablemente en la fase de EF Core).
 
+## Entrada 5 — `feature/tests`: proyecto de tests `FunkoApp.Test`
+
+**Fecha:** 2026-10-31
+
+**Antes de tocar código:** se revisó `RepositorioRemoto.Tests` (estructura de carpetas, `UserValidatorTests.cs`, `DomainErrorTests.cs`, `UserServiceTests.cs`) para copiar exactamente su estilo: mismas versiones de paquetes (`NUnit` 4.3.2, `Moq` 4.20.72, `FluentAssertions` 6.12.2), `[TestFixture]` + clases anidadas `CasosPositivos`/`CasosNegativos`, comentarios `// Arrange` `// Act` `// Assert`, datos de prueba propios (Pikachu/Charmander/Bulbasaur, no copiados de los ejemplos del profesor).
+
+**Qué se hizo:**
+1. Rama `feature/tests` desde `dev`. Proyecto `FunkoApp.Test` creado con `dotnet new nunit`, referencia a `FunkoAppi01`, paquetes `FluentAssertions`, `Moq` y `CSharpFunctionalExtensions` en las mismas versiones que usa `RepositorioRemoto`. Añadido a `FunkoAppi01.sln`.
+2. `Errors/DomainErrorTests.cs`: comprueba que cada tipo de `DomainError` construye el mensaje correcto (3 tests).
+3. `Validators/FunkoValidatorTests.cs`: `CasosPositivos` (datos válidos) y `CasosNegativos` (nombre/categoría en blanco, varios campos a la vez) (7 tests).
+4. `Mappers/FunkoMapperTests.cs`: las conversiones DTO↔Funko copian todos los campos (3 tests).
+5. `Repository/RepositoryFunkoTests.cs`: contra el repositorio real en memoria (sin mocks, es lo que se está probando): borrado lógico oculta el Funko de `GetAll`/`GetById`, `ExistsByName` se ignora a sí mismo al excluir su propio Id, `Update`/`SoftDelete` sobre un Id inexistente devuelven `null`/`false` (7 tests).
+6. `Services/ServiceFunkoTests.cs`: repositorio y validador **mockeados** con Moq. Aquí es donde se verifica no solo el resultado sino el cortocircuito, tal como pide el punto 4 de `CLAUDE.md`:
+   - `Add_ValidacionFalla_NoDeberiaLlamarAlRepositorioAdd` → `_mockRepository.Verify(r => r.Add(...), Times.Never)`: si el validador falla, el repositorio **no debe tocarse**.
+   - `Add_NombreDuplicado_NoDeberiaLlamarAlRepositorioAdd` → mismo `Times.Never`, ahora por nombre duplicado.
+   - `UpdatePrice_PrecioNegativo_NoDeberiaLlamarAlRepositorio` → `Times.Never` sobre `UpdatePrecio`.
+   - Más los casos positivos (`Times.Once` implícito al verificar que sí se llama) y los `NotFound` de `GetById`/`Update`/`Delete` (11 tests).
+7. Verificación: `dotnet build` de toda la solución → 0 errores, 0 warnings. **`dotnet test` → 31/31 en verde.**
+8. 6 commits atómicos (el proyecto en sí, y un commit por carpeta de tests), fusionados en `dev` con `--no-ff`.
+
+**Decisión tomada:** testear `RepositoryFunko` directamente (sin mocks) en vez de mockear algo dentro de él.
+- **Por qué:** es un repositorio en memoria, no hay nada que simular — simularlo sería probar el mock, no el código. Se mockea en `ServiceFunkoTests` porque ahí sí hay una dependencia externa real que aislar.
+- **Alternativa descartada:** usar TestContainers ya para el repositorio. Se descarta porque TestContainers es para una base de datos real (regla 4 de `CLAUDE.md`); aquí no hay ninguna todavía — llegará en la fase 9 con EF Core, momento en el que este test se sustituirá por uno de integración contra PostgreSQL/SQLite real.
+
+**Qué queda pendiente:**
+- Tests de integración del endpoint con `WebApplicationFactory` (fase 11 de la pauta) — de momento solo hay tests unitarios.
+- README real con instrucciones, cómo ejecutar los tests y justificación de decisiones.
+- Configuración en `appsettings` + Serilog (fase 8).
+- Persistencia EF Core (fase 9) — cuando llegue, `RepositoryFunkoTests` pasará a usar TestContainers con una base de datos real, como exige la norma.
+
 <!-- La siguiente entrada se añade aquí, con el mismo formato: Qué se hizo / Decisión y porqué / Alternativas descartadas / Pendiente -->
