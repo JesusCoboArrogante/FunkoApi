@@ -4,14 +4,12 @@ namespace FunkoAppi01.Repository;
 
 public interface IRepositoryFunko
 {
-    IReadOnlyList<Funko> GetAll();
-    Funko? GetById(long id);
-    Funko Add(Funko funko);
-    Funko? Update(long id, Funko funko);
-    bool SoftDelete(long id);
-
-    Funko? UpdatePrecio(long id, decimal precio);
-    IReadOnlyList<Funko> GetByName(string? nombre);
-
-
+    Task<IReadOnlyList<Funko>> GetAllAsync();
+    Task<Funko?> GetByIdAsync(long id);
+    Task<Funko> AddAsync(Funko funko);
+    Task<Funko?> UpdateAsync(long id, Funko funko);
+    Task<bool> SoftDeleteAsync(long id);
+    Task<Funko?> UpdatePrecioAsync(long id, decimal precio);
+    Task<IReadOnlyList<Funko>> GetByNameAsync(string? nombre);
+    Task<bool> ExistsByNameAsync(string nombre, long? excludeId = null);
 }

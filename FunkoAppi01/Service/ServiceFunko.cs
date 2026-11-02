@@ -1,45 +1,92 @@
-﻿using FunkoAppi01.Models;
+﻿using CSharpFunctionalExtensions;
+using FunkoAppi01.Dto;
+using FunkoAppi01.Errors;
+using FunkoAppi01.Mappers;
 using FunkoAppi01.Repository;
+using FunkoAppi01.Validators;
+using Microsoft.Extensions.Logging;
 
 namespace FunkoAppi01.Service;
 
-public class ServiceFunko(IRepositoryFunko repository) : IServiceFunko
+/// <summary>
+/// Orquesta las reglas de negocio de Funko entre el validador y el repositorio.
+/// </summary>
+public class ServiceFunko(
+    IRepositoryFunko repository,
+    IFunkoValidator validator,
+    ILogger<ServiceFunko> logger) : IServiceFunko
 {
-    public IEnumerable<Funko> GetAll() => repository.GetAll();
+    public async Task<IEnumerable<FunkoDto>> GetAllAsync() =>
+        (await repository.GetAllAsync()).Select(f => f.ToDto());
 
-    public Funko? GetById(long id) => repository.GetById(id);
-
-    public Funko Add(Funko funko)
+    public async Task<Result<FunkoDto, DomainError>> GetByIdAsync(long id)
     {
-        if (string.IsNullOrWhiteSpace(funko.Nombre))
-            throw new ArgumentException("El nombre es obligatorio");
+        if (await repository.GetByIdAsync(id) is not { } funko)
+            return Result.Failure<FunkoDto, DomainError>(FunkoErrors.NotFound(id));
 
-        if (funko.Precio < 0)
-            throw new ArgumentException("El precio no puede ser negativo");
-        
-        return repository.Add(funko);
+        return Result.Success<FunkoDto, DomainError>(funko.ToDto());
     }
 
-    public Funko? Update(long id, Funko funko)
+    public async Task<Result<FunkoDto, DomainError>> AddAsync(CreateFunkoDto request)
     {
-        if (string.IsNullOrWhiteSpace(funko.Nombre))
-            throw new ArgumentException("El nombre es obligatorio");
+        var validacion = validator.ValidateCreate(request);
+        if (validacion.IsFailure)
+            return Result.Failure<FunkoDto, DomainError>(validacion.Error);
 
-        if (funko.Precio < 0)
-            throw new ArgumentException("El precio no puede ser negativo");
-        
-        return repository.Update(id, funko);
+        if (await repository.ExistsByNameAsync(request.Nombre))
+        {
+            logger.LogWarning("Intento de crear un Funko con nombre duplicado: {Nombre}", request.Nombre);
+            return Result.Failure<FunkoDto, DomainError>(FunkoErrors.AlreadyExists(request.Nombre));
+        }
+
+        var creado = await repository.AddAsync(request.ToFunko());
+        logger.LogInformation("Funko creado: {Id} - {Nombre}", creado.Id, creado.Nombre);
+        return Result.Success<FunkoDto, DomainError>(creado.ToDto());
     }
 
-    public Funko? UpdatePrice(long id, decimal precio)
+    public async Task<Result<FunkoDto, DomainError>> UpdateAsync(long id, UpdateFunkoDto request)
+    {
+        var validacion = validator.ValidateUpdate(request);
+        if (validacion.IsFailure)
+            return Result.Failure<FunkoDto, DomainError>(validacion.Error);
+
+        if (await repository.ExistsByNameAsync(request.Nombre, id))
+            return Result.Failure<FunkoDto, DomainError>(FunkoErrors.AlreadyExists(request.Nombre));
+
+        if (await repository.UpdateAsync(id, request.ToFunko()) is not { } actualizado)
+        {
+            logger.LogWarning("Intento de actualizar un Funko inexistente: {Id}", id);
+            return Result.Failure<FunkoDto, DomainError>(FunkoErrors.NotFound(id));
+        }
+
+        logger.LogInformation("Funko actualizado: {Id} - {Nombre}", actualizado.Id, actualizado.Nombre);
+        return Result.Success<FunkoDto, DomainError>(actualizado.ToDto());
+    }
+
+    public async Task<Result<FunkoDto, DomainError>> UpdatePriceAsync(long id, decimal precio)
     {
         if (precio < 0)
-            throw new ArgumentException("El precio no puede ser negativo");
-        
-        return repository.UpdatePrecio(id, precio);
+            return Result.Failure<FunkoDto, DomainError>(
+                FunkoErrors.Validation(["El precio no puede ser negativo"]));
+
+        if (await repository.UpdatePrecioAsync(id, precio) is not { } actualizado)
+            return Result.Failure<FunkoDto, DomainError>(FunkoErrors.NotFound(id));
+
+        return Result.Success<FunkoDto, DomainError>(actualizado.ToDto());
     }
 
-    public bool Delete(long id) => repository.SoftDelete(id);
+    public async Task<Result<bool, DomainError>> DeleteAsync(long id)
+    {
+        if (!await repository.SoftDeleteAsync(id))
+        {
+            logger.LogWarning("Intento de borrar un Funko inexistente: {Id}", id);
+            return Result.Failure<bool, DomainError>(FunkoErrors.NotFound(id));
+        }
 
-    public IEnumerable<Funko> GetByName(string termino) => repository.GetByName(termino);
+        logger.LogInformation("Funko borrado (logico): {Id}", id);
+        return Result.Success<bool, DomainError>(true);
+    }
+
+    public async Task<IEnumerable<FunkoDto>> GetByNameAsync(string termino) =>
+        (await repository.GetByNameAsync(termino)).Select(f => f.ToDto());
 }

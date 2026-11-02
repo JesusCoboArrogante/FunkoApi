@@ -1,0 +1,25 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace FunkoAppi01.Dto;
+
+/// <summary>
+/// DTO con los datos necesarios para crear un Funko. El Id lo asigna el repositorio.
+/// </summary>
+/// <param name="Nombre">Nombre del Funko.</param>
+/// <param name="Precio">Precio de venta.</param>
+/// <param name="Stock">Unidades disponibles.</param>
+/// <param name="Categoria">Categoría a la que pertenece.</param>
+public record CreateFunkoDto(
+    [Required(ErrorMessage = "El nombre es obligatorio")]
+    [StringLength(100, ErrorMessage = "El nombre no puede superar los 100 caracteres")]
+    string Nombre,
+
+    [Range(0, double.MaxValue, ErrorMessage = "El precio no puede ser negativo")]
+    decimal Precio,
+
+    [Range(0, int.MaxValue, ErrorMessage = "El stock no puede ser negativo")]
+    int Stock,
+
+    [Required(ErrorMessage = "La categoría es obligatoria")]
+    string Categoria
+);
