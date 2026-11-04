@@ -1,6 +1,6 @@
 namespace FunkoAppi01.Models;
 
-public class Proveedor
+public record Proveedor
 {
     public long Id               {get; set; }
     public String Nombre         {get; set; } = string.Empty;
