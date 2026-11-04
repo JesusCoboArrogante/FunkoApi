@@ -6,20 +6,22 @@ namespace FunkoAppi01.Errors;
 /// <param name="Message">Mensaje.</param>
 public abstract record DomainError(string Message)
 {
-    /// <summary>Cuando no existe ningún Funko con ese identificador.</summary>
+    /// <summary>Registro no encontrado.</summary>
     /// <param name="Id">Identificador buscado.</param>
-    public sealed record NotFound(long Id)
-        : DomainError($"No se ha encontrado ningún Funko con el identificador: {Id}");
+    /// <param name="Entidad">Tipo de entidad.</param>
+    public sealed record NotFound(long Id, string Entidad = "Funko")
+        : DomainError($"No se ha encontrado ningún registro de {Entidad} con el identificador: {Id}");
 
     /// <summary>Los datos no cumplen con el validador.</summary>
     /// <param name="Errors">Lista de errores detectados.</param>
     public sealed record Validation(IEnumerable<string> Errors)
         : DomainError(string.Join(", ", Errors));
 
-    /// <summary>Ya existe un Funko activo con ese nombre.</summary>
+    //// <summary>Ya existe un registro con ese nombre.</summary>
     /// <param name="Nombre">Nombre duplicado.</param>
-    public sealed record AlreadyExists(string Nombre)
-        : DomainError($"Ya existe un Funko con el nombre: {Nombre}");
+    /// <param name="Entidad">Tipo de entidad.</param>
+    public sealed record AlreadyExists(string Nombre, string Entidad = "Funko")
+        : DomainError($"Ya existe un registro de {Entidad} con el nombre: {Nombre}");
 
     /// <summary>Credenciales inválidas o token no válido.</summary>
     /// <param name="Reason">Motivo.</param>
