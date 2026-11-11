@@ -21,16 +21,6 @@ public static class PersistenceConfig
                 options.UseSqlite(databaseConfig.ConnectionString);
         });
 
-        services.AddDbContext<ProveedorMongoDbContext>(options => options.UseMongoDB(
-            configuration["MongoDbSettings:ConnectionString"] ??
-            throw new InvalidOperationException("Falta MongoDbSettings:ConnectionString"),
-        
-            configuration["MongoDbSettings:DatabaseName"] ??
-                throw new InvalidOperationException("Falta MongoDbSettings:DatabaseName")
-            ));
-        
-        
-
         return services;
     }
 }

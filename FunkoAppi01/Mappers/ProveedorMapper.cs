@@ -1,36 +1,29 @@
 using FunkoAppi01.Dto;
-using FunkoAppi01.Entity;
 using FunkoAppi01.Models;
 
 namespace FunkoAppi01.Mappers;
 
+/// <summary>
+/// Métodos de extensión para convertir entre los DTOs y el modelo de dominio de Proveedor.
+/// </summary>
 public static class ProveedorMapper
 {
-    public static ProveedorDto ToDto(this Proveedor proveedor)
+    public static Proveedor ToProveedor(this CreateProveedorDto request) => new()
     {
-        return new ProveedorDto(
-            proveedor.Id,
-            proveedor.Nombre,
-            proveedor.Telefono
-        );
-    }
+        Nombre = request.Nombre,
+        Telefono = request.Telefono
+    };
 
-    public static Proveedor ToProveedor(this CreateProveedorDto dto)
+    public static Proveedor ToProveedor(this UpdateProveedorDto request) => new()
     {
-        return new Proveedor
-        {
-            Nombre = dto.Nombre,
-            Telefono = dto.Telefono
-        };
-    }
+        Nombre = request.Nombre,
+        Telefono = request.Telefono
+    };
 
-    public static Proveedor ToProveedor(this UpdateProveedorDto dto)
-    {
-        return new Proveedor
-        {
-            Nombre = dto.Nombre,
-            Telefono = dto.Telefono
-        };
-    }
-
+    public static ProveedorDto ToDto(this Proveedor proveedor) => new(
+        proveedor.Id,
+        proveedor.Nombre,
+        proveedor.Telefono,
+        proveedor.CreatedAt,
+        proveedor.UpdatedAt);
 }

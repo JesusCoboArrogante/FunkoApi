@@ -6,21 +6,11 @@ namespace FunkoAppi01.Service;
 
 public interface IServiceCategoria
 {
-    // Devuelve todas las categorías.
     Task<IEnumerable<CategoriaDto>> GetAllAsync();
-
-    // Devuelve la categoría o un error si no existe.
     Task<Result<CategoriaDto, DomainError>> GetByIdAsync(long id);
-
-    // Valida y crea una categoría.
-    Task<Result<CategoriaDto, DomainError>> AddAsync(
-        CreateCategoriaDto request);
-
-    // Valida y actualiza una categoría.
-    Task<Result<CategoriaDto, DomainError>> UpdateAsync(
-        long id,
-        UpdateCategoriaDto request);
-
-    // Borra una categoría si existe y no tiene Funkos asociados.
+    Task<Result<CategoriaDto, DomainError>> AddAsync(CreateCategoriaDto request);
+    Task<Result<CategoriaDto, DomainError>> UpdateAsync(long id, UpdateCategoriaDto request);
     Task<Result<bool, DomainError>> DeleteAsync(long id);
+    Task<IEnumerable<CategoriaDto>> GetByNameAsync(string termino);
+    Task<PagedResponse<CategoriaDto>> GetPagedAsync(int page, int pageSize);
 }

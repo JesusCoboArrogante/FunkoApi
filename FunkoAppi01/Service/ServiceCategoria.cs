@@ -4,136 +4,96 @@ using FunkoAppi01.Errors;
 using FunkoAppi01.Mappers;
 using FunkoAppi01.Repository;
 using FunkoAppi01.Validators;
+using Microsoft.AspNetCore.OutputCaching;
 
 namespace FunkoAppi01.Service;
 
-public class ServiceCategoria (
+/// <summary>
+/// Orquesta las reglas de negocio de Categoria entre el validador y el repositorio.
+/// </summary>
+public class ServiceCategoria(
     IRepositoryCategoria repository,
-    ILogger <ServiceCategoria> logger,
-    ICategoriaValidator validator) : IServiceCategoria
+    ICategoriaValidator validator,
+    ILogger<ServiceCategoria> logger,
+    IOutputCacheStore outputCacheStore) : IServiceCategoria
 {
-    public async Task<IEnumerable<CategoriaDto>> GetAllAsync()
-    {
-        var categoria = await repository.GetAllAsync();
-        return categoria.Select(c => c.ToDto());
-    }
+    private const string CacheTag = "categorias";
+
+    public async Task<IEnumerable<CategoriaDto>> GetAllAsync() =>
+        (await repository.GetAllAsync()).Select(c => c.ToDto());
 
     public async Task<Result<CategoriaDto, DomainError>> GetByIdAsync(long id)
     {
-        var categoria = await repository.GetByIdAsync(id);
-        if (categoria == null)
-        {
-            return Result.Failure<CategoriaDto, DomainError>(
-                new DomainError.NotFound(id, "Categoria"));
-        }
-        
+        if (await repository.GetByIdAsync(id) is not { } categoria)
+            return Result.Failure<CategoriaDto, DomainError>(CategoriaErrors.NotFound(id));
+
         return Result.Success<CategoriaDto, DomainError>(categoria.ToDto());
     }
 
-    public async Task<Result<CategoriaDto, DomainError>> AddAsync( CreateCategoriaDto request)
+    public async Task<Result<CategoriaDto, DomainError>> AddAsync(CreateCategoriaDto request)
     {
         var validacion = validator.ValidateCreate(request);
-
         if (validacion.IsFailure)
-        {
             return Result.Failure<CategoriaDto, DomainError>(validacion.Error);
-        }
 
-        var categoria = request.ToCategoria();
-        categoria.Nombre = categoria.Nombre.Trim();
-
-        if (await repository.ExistsByNameAsync(categoria.Nombre))
+        if (await repository.ExistsByNameAsync(request.Nombre))
         {
-            return Result.Failure<CategoriaDto, DomainError>(
-                new DomainError.AlreadyExists(
-                    categoria.Nombre, "Categoría"));
+            logger.LogWarning("Intento de crear una Categoria con nombre duplicado: {Nombre}", request.Nombre);
+            return Result.Failure<CategoriaDto, DomainError>(CategoriaErrors.AlreadyExists(request.Nombre));
         }
 
-        var creada = await repository.AddAsync(categoria);
-
-        logger.LogInformation(
-            "Categoría creada: {Id} - {Nombre}",
-            creada.Id,
-            creada.Nombre);
-
-        return Result.Success<CategoriaDto, DomainError>(
-            creada.ToDto());
+        var creada = await repository.AddAsync(request.ToCategoria());
+        logger.LogInformation("Categoria creada: {Id} - {Nombre}", creada.Id, creada.Nombre);
+        await outputCacheStore.EvictByTagAsync(CacheTag, CancellationToken.None);
+        return Result.Success<CategoriaDto, DomainError>(creada.ToDto());
     }
 
     public async Task<Result<CategoriaDto, DomainError>> UpdateAsync(long id, UpdateCategoriaDto request)
     {
         var validacion = validator.ValidateUpdate(request);
-
         if (validacion.IsFailure)
+            return Result.Failure<CategoriaDto, DomainError>(validacion.Error);
+
+        if (await repository.ExistsByNameAsync(request.Nombre, id))
+            return Result.Failure<CategoriaDto, DomainError>(CategoriaErrors.AlreadyExists(request.Nombre));
+
+        if (await repository.UpdateAsync(id, request.ToCategoria()) is not { } actualizada)
         {
-            return Result.Failure<CategoriaDto, DomainError>(
-                validacion.Error);
+            logger.LogWarning("Intento de actualizar una Categoria inexistente: {Id}", id);
+            return Result.Failure<CategoriaDto, DomainError>(CategoriaErrors.NotFound(id));
         }
 
-        var existente = await repository.GetByIdAsync(id);
-
-        if (existente is null)
-        {
-            return Result.Failure<CategoriaDto, DomainError>(
-                new DomainError.NotFound(id, "Categoría"));
-        }
-
-        var categoria = request.ToCategoria();
-        categoria.Nombre = categoria.Nombre.Trim();
-
-        if (await repository.ExistsByNameAsync(categoria.Nombre, id))
-        {
-            return Result.Failure<CategoriaDto, DomainError>(
-                new DomainError.AlreadyExists(
-                    categoria.Nombre, "Categoría"));
-        }
-
-        var actualizada = await repository.UpdateAsync(id, categoria);
-
-        if (actualizada is null)
-        {
-            return Result.Failure<CategoriaDto, DomainError>(
-                new DomainError.NotFound(id, "Categoría"));
-        }
-
-        logger.LogInformation(
-            "Categoría actualizada: {Id} - {Nombre}",
-            actualizada.Id,
-            actualizada.Nombre);
-
-        return Result.Success<CategoriaDto, DomainError>(
-            actualizada.ToDto());
-
+        logger.LogInformation("Categoria actualizada: {Id} - {Nombre}", actualizada.Id, actualizada.Nombre);
+        await outputCacheStore.EvictByTagAsync(CacheTag, CancellationToken.None);
+        return Result.Success<CategoriaDto, DomainError>(actualizada.ToDto());
     }
 
     public async Task<Result<bool, DomainError>> DeleteAsync(long id)
     {
-        var categoria = await repository.GetByIdAsync(id);
-
-        if (categoria is null)
+        if (!await repository.SoftDeleteAsync(id))
         {
-            return Result.Failure<bool, DomainError>(
-                new DomainError.NotFound(id, "Categoría"));
+            logger.LogWarning("Intento de borrar una Categoria inexistente: {Id}", id);
+            return Result.Failure<bool, DomainError>(CategoriaErrors.NotFound(id));
         }
 
-        if (await repository.HasFunkoAsync(id))
-        {
-            return Result.Failure<bool, DomainError>(
-                new DomainError.Conflict(
-                    $"No se puede borrar la categoría {id} porque tiene Funkos asociados"));
-        }
-
-        var eliminada = await repository.SoftDeleteAsync(id);
-
-        if (!eliminada)
-        {
-            return Result.Failure<bool, DomainError>(
-                new DomainError.NotFound(id, "Categoría"));
-        }
-
-        logger.LogInformation(
-            "Categoría eliminada: {Id}", id);
-
+        logger.LogInformation("Categoria borrada (logico): {Id}", id);
+        await outputCacheStore.EvictByTagAsync(CacheTag, CancellationToken.None);
         return Result.Success<bool, DomainError>(true);
+    }
+
+    public async Task<IEnumerable<CategoriaDto>> GetByNameAsync(string termino) =>
+        (await repository.GetByNameAsync(termino)).Select(c => c.ToDto());
+
+    public async Task<PagedResponse<CategoriaDto>> GetPagedAsync(int page, int pageSize)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var (items, total) = await repository.GetPagedAsync(page, pageSize);
+        var totalPages = (int)Math.Ceiling(total / (double)pageSize);
+
+        return new PagedResponse<CategoriaDto>(
+            items.Select(c => c.ToDto()),
+            new PageMetadata(page, pageSize, totalPages, total));
     }
 }

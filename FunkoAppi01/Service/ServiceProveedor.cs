@@ -4,32 +4,29 @@ using FunkoAppi01.Errors;
 using FunkoAppi01.Mappers;
 using FunkoAppi01.Repository;
 using FunkoAppi01.Validators;
+using Microsoft.AspNetCore.OutputCaching;
 
 namespace FunkoAppi01.Service;
 
-public class ServiceProveedor (
+/// <summary>
+/// Orquesta las reglas de negocio de Proveedor entre el validador y el repositorio.
+/// </summary>
+public class ServiceProveedor(
     IRepositoryProveedor repository,
+    IProveedorValidator validator,
     ILogger<ServiceProveedor> logger,
-    IProveedoValidator validator
-        ) : IServiceProveedor
+    IOutputCacheStore outputCacheStore) : IServiceProveedor
 {
-    public async Task<IEnumerable<ProveedorDto>> GetAllAsync()
-    {
-        var proveedor  = await repository.GetAllAsync();
-        return proveedor.Select(p => p.ToDto());
+    private const string CacheTag = "proveedores";
 
-    }
+    public async Task<IEnumerable<ProveedorDto>> GetAllAsync() =>
+        (await repository.GetAllAsync()).Select(p => p.ToDto());
 
     public async Task<Result<ProveedorDto, DomainError>> GetByIdAsync(long id)
     {
-        var proveedor = await repository.GetByIdAsync(id);
-        if (proveedor == null)
-        {
-            return Result.Failure<ProveedorDto, DomainError>(
-                new DomainError.NotFound(id, "Proveedor")
-            );
-        }
-        
+        if (await repository.GetByIdAsync(id) is not { } proveedor)
+            return Result.Failure<ProveedorDto, DomainError>(ProveedorErrors.NotFound(id));
+
         return Result.Success<ProveedorDto, DomainError>(proveedor.ToDto());
     }
 
@@ -37,109 +34,66 @@ public class ServiceProveedor (
     {
         var validacion = validator.ValidateCreate(request);
         if (validacion.IsFailure)
-        {
             return Result.Failure<ProveedorDto, DomainError>(validacion.Error);
-        }
 
-        var proveedor = request.ToProveedor();
-        proveedor.Nombre = proveedor.Nombre.Trim();
-        proveedor.Telefono = proveedor.Telefono;
-
-        if (await repository.ExistsByNameAsync(proveedor.Nombre))
+        if (await repository.ExistsByNameAsync(request.Nombre))
         {
-            return Result.Failure<ProveedorDto, DomainError>(
-                new DomainError.AlreadyExists(
-                    proveedor.Nombre, "Proveedor")
-            );
+            logger.LogWarning("Intento de crear un Proveedor con nombre duplicado: {Nombre}", request.Nombre);
+            return Result.Failure<ProveedorDto, DomainError>(ProveedorErrors.AlreadyExists(request.Nombre));
         }
-        
-        var creada = await repository.AddAsync(proveedor);
 
-        logger.LogInformation(
-            "Proveedor creado: {Id} - {Nombre} - {Telefono}",
-            creada.Id,
-            creada.Nombre,
-            creada.Telefono
-        );
-        
-        return Result.Success<ProveedorDto, DomainError>(creada.ToDto());
+        var creado = await repository.AddAsync(request.ToProveedor());
+        logger.LogInformation("Proveedor creado: {Id} - {Nombre}", creado.Id, creado.Nombre);
+        await outputCacheStore.EvictByTagAsync(CacheTag, CancellationToken.None);
+        return Result.Success<ProveedorDto, DomainError>(creado.ToDto());
     }
 
     public async Task<Result<ProveedorDto, DomainError>> UpdateAsync(long id, UpdateProveedorDto request)
     {
         var validacion = validator.ValidateUpdate(request);
         if (validacion.IsFailure)
-        {
             return Result.Failure<ProveedorDto, DomainError>(validacion.Error);
-        }
-        var existe = await repository.GetByIdAsync(id);
 
-        if (existe is null)
+        if (await repository.ExistsByNameAsync(request.Nombre, id))
+            return Result.Failure<ProveedorDto, DomainError>(ProveedorErrors.AlreadyExists(request.Nombre));
+
+        if (await repository.UpdateAsync(id, request.ToProveedor()) is not { } actualizado)
         {
-            return Result.Failure<ProveedorDto, DomainError>(
-                new DomainError.NotFound(id, "Proveedor")
-            );
-        }
-        
-        var proveedor = request.ToProveedor();
-        proveedor.Nombre = proveedor.Nombre.Trim();
-        proveedor.Telefono = proveedor.Telefono;
-
-        if (await repository.ExistsByNameAsync(proveedor.Nombre, id))
-        {
-            return Result.Failure<ProveedorDto, DomainError>(
-                new DomainError.NotFound(id, "Proveedor"));
+            logger.LogWarning("Intento de actualizar un Proveedor inexistente: {Id}", id);
+            return Result.Failure<ProveedorDto, DomainError>(ProveedorErrors.NotFound(id));
         }
 
-        var actualizada = await repository.UpdateAsync(id, proveedor);
-
-        if (actualizada is null)
-        {
-            return Result.Failure<ProveedorDto, DomainError>(
-                new DomainError.NotFound(id, "Proveedor")
-            );
-        }
-        
-        logger.LogInformation(
-            "Proveedor actualizado: {Id} - {Nombre} - {Telefono}",
-            actualizada.Id,
-            actualizada.Nombre,
-            actualizada.Telefono
-            );
-        
-        return  Result.Success<ProveedorDto, DomainError>(actualizada.ToDto());
+        logger.LogInformation("Proveedor actualizado: {Id} - {Nombre}", actualizado.Id, actualizado.Nombre);
+        await outputCacheStore.EvictByTagAsync(CacheTag, CancellationToken.None);
+        return Result.Success<ProveedorDto, DomainError>(actualizado.ToDto());
     }
 
     public async Task<Result<bool, DomainError>> DeleteAsync(long id)
     {
-        var proveedor = await repository.GetByIdAsync(id);
-        if (proveedor is null)
+        if (!await repository.SoftDeleteAsync(id))
         {
-            return Result.Failure<bool, DomainError>(
-                new DomainError.NotFound(id, "Proveedor")
-            );
+            logger.LogWarning("Intento de borrar un Proveedor inexistente: {Id}", id);
+            return Result.Failure<bool, DomainError>(ProveedorErrors.NotFound(id));
         }
 
-        if (await repository.HasFunkoAsync(id))
-        {
-            return Result.Failure<bool, DomainError>(
-                new DomainError.Conflict(
-                    $"No se puede borrar el proveedor {id} por que tienen Funkos asociados")
-            );
-        }
-
-        var eliminada = await repository.SoftDeleteAsync(id);
-
-        if (!eliminada)
-        {
-            return Result.Failure<bool, DomainError>(
-                 new DomainError.NotFound(id, "Proveedor")
-                );
-        }
-        
-        logger.LogInformation(
-            "Proveedor eliminado: {id}", id);
-        
+        logger.LogInformation("Proveedor borrado (logico): {Id}", id);
+        await outputCacheStore.EvictByTagAsync(CacheTag, CancellationToken.None);
         return Result.Success<bool, DomainError>(true);
+    }
+
+    public async Task<IEnumerable<ProveedorDto>> GetByNameAsync(string termino) =>
+        (await repository.GetByNameAsync(termino)).Select(p => p.ToDto());
+
+    public async Task<PagedResponse<ProveedorDto>> GetPagedAsync(int page, int pageSize)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var (items, total) = await repository.GetPagedAsync(page, pageSize);
+        var totalPages = (int)Math.Ceiling(total / (double)pageSize);
+
+        return new PagedResponse<ProveedorDto>(
+            items.Select(p => p.ToDto()),
+            new PageMetadata(page, pageSize, totalPages, total));
     }
 }

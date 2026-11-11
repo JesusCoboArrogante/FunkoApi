@@ -9,6 +9,7 @@ public interface IRepositoryCategoria
     Task<Categoria> AddAsync(Categoria categoria);
     Task<Categoria?> UpdateAsync(long id, Categoria categoria);
     Task<bool> SoftDeleteAsync(long id);
-    Task<bool> ExistsByNameAsync(string nombre, long? excluideId = null);
-    Task<bool> HasFunkoAsync(long id);
+    Task<IReadOnlyList<Categoria>> GetByNameAsync(string? nombre);
+    Task<bool> ExistsByNameAsync(string nombre, long? excludeId = null);
+    Task<(IReadOnlyList<Categoria> Items, int Total)> GetPagedAsync(int page, int pageSize);
 }

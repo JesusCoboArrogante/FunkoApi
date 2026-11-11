@@ -11,5 +11,5 @@ public interface IRepositoryProveedor
     Task<bool> SoftDeleteAsync(long id);
     Task<IReadOnlyList<Proveedor>> GetByNameAsync(string? nombre);
     Task<bool> ExistsByNameAsync(string nombre, long? excludeId = null);
-    Task<bool> HasFunkoAsync(long id);
+    Task<(IReadOnlyList<Proveedor> Items, int Total)> GetPagedAsync(int page, int pageSize);
 }

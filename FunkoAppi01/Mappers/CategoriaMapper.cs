@@ -3,30 +3,24 @@ using FunkoAppi01.Models;
 
 namespace FunkoAppi01.Mappers;
 
+/// <summary>
+/// Métodos de extensión para convertir entre los DTOs y el modelo de dominio de Categoria.
+/// </summary>
 public static class CategoriaMapper
 {
-    public static CategoriaDto ToDto(this Categoria categoria)
+    public static Categoria ToCategoria(this CreateCategoriaDto request) => new()
     {
-        return new CategoriaDto(
-            categoria.Id,
-            categoria.Nombre
-        );
-    }
+        Nombre = request.Nombre
+    };
 
-    public static Categoria ToCategoria(this CreateCategoriaDto dto)
+    public static Categoria ToCategoria(this UpdateCategoriaDto request) => new()
     {
-        return new Categoria
-        {
-            Nombre = dto.Nombre
-        };
-    }
+        Nombre = request.Nombre
+    };
 
-    public static Categoria ToCategoria(this UpdateCategoriaDto dto)
-    {
-        return new Categoria
-        {
-            Nombre = dto.Nombre
-        };
-    }
-
+    public static CategoriaDto ToDto(this Categoria categoria) => new(
+        categoria.Id,
+        categoria.Nombre,
+        categoria.CreatedAt,
+        categoria.UpdatedAt);
 }

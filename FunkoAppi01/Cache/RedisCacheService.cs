@@ -1,45 +1,65 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using FunkoAppi01.Config;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
-using StackExchange.Redis;
 
 namespace FunkoAppi01.Cache;
 
-public class RedisCacheService (IConnectionMultiplexer redis, IOptions<CacheConfig> options): IServiceCache
+/// <summary>
+/// Caché distribuida con Redis. Se usa en Production, para que la caché sobreviva
+/// a reinicios del contenedor y se pueda compartir entre varias réplicas de la API.
+/// </summary>
+public class RedisCacheService(IDistributedCache distributedCache, IOptions<CacheOptions> options) : ICacheService
 {
-    
-    private readonly IDatabase _db = redis.GetDatabase();
-    private readonly TimeSpan _defaultExpiration = TimeSpan.FromSeconds(options.Value.ExpirationSeconds);
-    
-    public async Task<T?> GetAsync<T>(string key) where T : class
-    {
-        var value = await _db.StringGetAsync(key);
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> Locks = new();
 
-        if (value.IsNullOrEmpty)
-        {
-            return null;
-        }
-        
-        return JsonSerializer.Deserialize<T>((string)value);
+    public async Task<T?> GetAsync<T>(string key, CancellationToken ct = default)
+    {
+        var json = await distributedCache.GetStringAsync(key, ct);
+        return json is null ? default : JsonSerializer.Deserialize<T>(json);
     }
 
-    public async Task SetASync<T>(string key, T value, TimeSpan? expiration = null) where T : class
+    public async Task SetAsync<T>(string key, T value, TimeSpan? expiration = null, CancellationToken ct = default)
     {
         var json = JsonSerializer.Serialize(value);
-        await _db.StringSetAsync(key, json, expiration ?? _defaultExpiration);
-    }
-
-    public Task<bool> RemoveAsync(string key)
-    {
-        return _db.KeyDeleteAsync(key);
-    }
-
-    public async Task ClearAsync()
-    {
-        foreach (var endPoint in redis.GetEndPoints())
+        await distributedCache.SetStringAsync(key, json, new DistributedCacheEntryOptions
         {
-            var server = redis.GetServer(endPoint);
-            await server.FlushDatabaseAsync();
+            AbsoluteExpirationRelativeToNow = ResolverExpiracion(expiration),
+            SlidingExpiration = TimeSpan.FromMinutes(options.Value.SlidingExpirationMinutes)
+        }, ct);
+    }
+
+    public async Task RemoveAsync(string key, CancellationToken ct = default) =>
+        await distributedCache.RemoveAsync(key, ct);
+
+    public async Task<bool> ExistsAsync(string key, CancellationToken ct = default) =>
+        await distributedCache.GetStringAsync(key, ct) is not null;
+
+    public async Task<T?> GetOrSetAsync<T>(string key, Func<Task<T>> factory, TimeSpan? expiration = null, CancellationToken ct = default)
+    {
+        var cached = await GetAsync<T>(key, ct);
+        if (cached is not null)
+            return cached;
+
+        var semaforo = Locks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+        await semaforo.WaitAsync(ct);
+        try
+        {
+            cached = await GetAsync<T>(key, ct);
+            if (cached is not null)
+                return cached;
+
+            var valor = await factory();
+            await SetAsync(key, valor, expiration, ct);
+            return valor;
+        }
+        finally
+        {
+            semaforo.Release();
         }
     }
+
+    private TimeSpan ResolverExpiracion(TimeSpan? expiration) =>
+        expiration ?? TimeSpan.FromMinutes(options.Value.DefaultExpirationMinutes);
 }
