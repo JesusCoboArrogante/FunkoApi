@@ -8,3 +8,6 @@ logs/
 *.db
 *.db-shm
 *.db-wal
+informe-exposicion-funkoapp.pdf
+EXPOSICION.md
+TestResults/

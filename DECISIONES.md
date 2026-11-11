@@ -372,4 +372,210 @@ Normas de este documento (ver `CLAUDE.md` en `Entorno-Servidor/`, puntos 7 y 9):
 - README: añadir cómo levantar el perfil Production con `docker compose up`.
 - Nada más de la pauta original queda sin abordar salvo la fase 3 (Minimal API, omitida a propósito desde el bloque del README) y el caso de borde de "token expirado" de verdad (fase 11, opcional).
 
+## Entrada 12. Ritmo del temario: qué se adelantó y qué se queda pendiente de revisar
+
+**Qué se hizo:** Cristian avisa de que la clase va por el tema 18, mientras que la fase 11 (temas 24 y 28) y la fase 12 (tema 29) de la pauta corresponden a temario que todavía no se ha visto. Se revisa qué partes de lo ya construido dependen de eso.
+
+**Decisión tomada:**
+- Los tests (NUnit + Moq + FluentAssertions, unitarios y de integración) **no son el problema**: siguen el mismo patrón que `RepositorioRemoto`, que Cristian ya domina. Se mantienen tal cual.
+- Swagger/OpenAPI con XMLDoc (parte de la fase 11) y todo el despliegue con Docker (fase 12, tema 29) sí son temario no visto todavía. El código ya existe, compila, pasa los tests y se verificó en vivo — no se revierte, porque sería tirar trabajo verificado — pero se marca aquí como **adelanto pendiente de repasar con Cristian antes de exponerlo**, para que no llegue a la exposición sin entender alguna de las dos partes.
+- Repasando `RepositorioRemoto` por este motivo, se encuentra que sus tests de repositorio (`UserRepositoryTests.cs`) usan `Testcontainers.PostgreSql` (contenedor real de Postgres durante el test), tal como pide la regla 4 del `CLAUDE.md` ("TestContainers para la capa de datos, base de datos real, no simulada"). Nuestros tests de datos usan SQLite en memoria y el proveedor InMemory de EF Core, no Testcontainers — una desviación de la referencia que nunca se había marcado como decisión nuestra (incumplía el punto 1 de la regla de oro).
+- **Esa desviación se mantiene y ahora queda justificada:** Testcontainers depende de Docker, y Docker es justo la fase 12 (tema 29) que todavía no se ha visto. Adoptar Testcontainers ahora introduciría una dependencia de una técnica de temario futuro antes de tiempo. Se retoma cuando la clase llegue a Docker.
+
+**Alternativas descartadas:**
+- Revertir las fases 11 (parcial) y 12 del entregable para que cuadre exactamente con el tema 18. Descartada por Cristian: prefiere mantener el trabajo ya verificado y repasarlo con calma antes de exponerlo, no borrarlo.
+- Migrar ya los tests de datos a Testcontainers para igualar la referencia. Descartada por la misma razón: necesitaría Docker, que es justo lo que todavía no toca.
+
+**Qué queda pendiente:**
+- Repasar con Cristian, antes de la exposición, la parte de Swagger/XMLDoc y todo el bloque de Docker, para que pueda explicarlo con la misma soltura que el resto.
+- Cuando la clase llegue al tema 29 (Docker), valorar migrar los tests de datos de SQLite/InMemory a Testcontainers.PostgreSql, para igualar de verdad la técnica de `RepositorioRemoto`.
+- Sigue abierta la decisión sobre renombrar `Infraestructure/`→`Infrastructure/`, `Repository/`→`Repositories/` y `Service/`→`Services/` para igualar los nombres de carpeta de `RepositorioRemoto` (detectado en la revisión de esta misma sesión, Cristian no ha confirmado todavía si se hace).
+
+## Entrada 13. CRUD de Categoria y Proveedor (entrega y exposición mañana)
+
+**Qué se hizo:**
+1. Sincronización con el repo de Jesús: su `main` ya tenía fusionado nuestro PR entero. Añadió por su cuenta dos clases sueltas sin usar (`Models/Categoria.cs`, `Models/Proveedor.cs`) y tiene una rama propia sin fusionar (`feature-repository`) montando un CRUD de Categoria. No se fusiona nada de eso: no aporta nada que no tengamos ya y mete riesgo a horas de la entrega.
+2. Cristian trae aviso de Jesús (confirmado con foto de la pizarra de clase, `Pizarra-Funko.jpg`) de que Categoria y Proveedor necesitan su propio CRUD, no solo existir como relación del Funko. La pizarra muestra más cosas (Redis, MongoDB políglota, subida de imágenes, Bruno automatizado) que exceden claramente el documento oficial de la Práctica 3 — se decide con Cristian limitar el alcance de esta sesión a: CRUD de Categoria y Proveedor en SQL/EF Core, con el mismo patrón que Funko.
+3. Añadida `ProveedorEntity` (Fluent API, tabla `proveedores`, borrado lógico) y relación opcional `Funko → Proveedor` (`ProveedorId` nullable, `OnDelete(Restrict)`). Opcional porque exponerla como obligatoria habría exigido tocar `CreateFunkoDto`/`UpdateFunkoDto` y los 53 tests existentes de Funko, un riesgo innecesario a horas de la entrega.
+4. `CategoriaEntity` ampliada con `IsDeleted`/`CreatedAt`/`UpdatedAt` (antes solo tenía Id y Nombre): sin eso no se puede dar de baja una categoría igual que un Funko.
+5. CRUD completo de Categoria y Proveedor replicando exactamente la arquitectura de Funko: Entity (Fluent API) → Model → Dto → Mapper → Repository (valores planos) → Service (`Result<T, DomainError>`) → Validator → Controller.
+6. Lectura pública, escritura (`Crear`/`Actualizar`/`Borrar`) restringida a rol `ADMIN` — tal como muestra la pizarra para Categoria y Proveedor. **No se ha tocado la autorización de `FunkoController`** (que deja Crear/Actualizar a cualquier usuario autenticado, no solo Admin): cambiarla ahora habría sido otro riesgo no pedido explícitamente para Funko.
+7. `DomainError.NotFound`/`AlreadyExists` generalizados con un parámetro `Entidad` (por defecto `"Funko"`, no rompe nada existente) para reutilizar un único tipo de error en las tres entidades, igual que había planteado Jesús en su rama (sin fusionarla, pero la idea era buena).
+8. Migración `AddCategoriaProveedorCrud` generada y aplicada en limpio contra SQLite: build, 82/82 tests (53 de antes + 29 nuevos) y pruebas en vivo con `curl` — login, crear/duplicar/actualizar/borrar Categoria y Proveedor, lectura anónima en 200 y escritura sin token en 401.
+9. Encontrado y corregido en caliente un fallo de concordancia de género en los mensajes de error ("Ya existe un Categoria" en vez de "una Categoria"): se reescribió a una frase neutra, "Ya existe un registro de {Entidad} con el nombre...", que funciona para Funko, Categoria y Proveedor sin más parches.
+
+**Decisión tomada:** CRUD completo de Categoria y Proveedor en SQL/EF Core, mismo patrón que Funko, relación Proveedor→Funko opcional, escritura solo Admin.
+
+**Alternativas descartadas:**
+- Fusionar la rama `feature-repository` de Jesús. Descartada: no está en su `main`, es trabajo suyo independiente, y a horas de la entrega no compensa el riesgo de integrarlo.
+- Hacer también lo de Redis, MongoDB, imágenes y Bruno de la pizarra. Descartado con Cristian: no está en el documento oficial de la práctica y es inviable en el tiempo que queda.
+- Relación `Proveedor` obligatoria en Funko (como Categoria). Descartada por el riesgo de romper los 53 tests existentes de Funko a horas de la entrega; queda como mejora futura.
+- Igualar la autorización de Categoria/Proveedor (todo Admin) en `FunkoController` también. Descartada: no se pidió, y tocar algo que ya funciona y está evaluado no compensa el riesgo.
+
+**Qué queda pendiente:**
+- Exponer `Proveedor` en los DTOs de Funko (ahora mismo la relación existe en la base de datos pero no se puede asignar todavía desde la API).
+- Tests de integración (`WebApplicationFactory`) de `CategoriaController`/`ProveedorController` — por ahora solo hay tests de servicio y validador (Moq), igual que se hizo para Funko en su momento, pero no ha dado tiempo a los de integración con la entrega mañana.
+- La búsqueda por nombre (`GetByNameAsync`) distingue mayúsculas de minúsculas en SQLite (heredado del mismo patrón que ya tenía `RepositoryFunko`): buscar "ani" no encuentra "Anime". No es una regresión nueva, es una limitación ya existente; se deja anotada para no repetir la pregunta.
+- Sigue sin confirmar el renombrado de carpetas (`Infraestructure/`→`Infrastructure/`, etc.) de la Entrada 12.
+
+## Entrada 14. Cierre: no se renombran las carpetas
+
+**Qué se hizo:** Cristian compara a mano la estructura de carpetas contra el árbol de ejemplo de la pauta oficial. Se confirma que difieren en nombres (`Controller` vs `Controllers`, `Repository` vs `Repositories`, `Service` vs `Services`, `Infraestructure` vs `Infrastructure`), heredado del proyecto de Jesús.
+
+**Decisión tomada:** no se renombra nada. Lo que importa es la arquitectura (capas, separación de responsabilidades, `Result<T, DomainError>`, Fluent API, DTOs) y esa sí coincide con la pauta y con `RepositorioRemoto`. Los nombres de carpeta son cosméticos y Cristian decide que no vale la pena el riesgo de tocar namespaces en todo el proyecto a horas de la entrega.
+
+**Alternativas descartadas:** renombrar `Infraestructure/`→`Infrastructure/`, `Repository/`→`Repositories/`, `Service/`→`Services/`, `Controller/`→`Controllers/` (quedó propuesto en la Entrada 12). Descartado explícitamente por Cristian.
+
+**Qué queda pendiente:** nada de este punto — queda cerrado. Si en algún momento se quiere hacer, es un cambio mecánico (renombrar carpeta + namespace + imports) sin impacto en el comportamiento.
+
+## Entrada 15. Ampliación de la entrega: extras pedidos por el profesor (plazo: jueves 12 nov, 20:30)
+
+**Contexto:** al ampliar el plazo de entrega, el profesor amplió también el alcance (foto de los apuntes de clase de Cristian): documentación Swagger por endpoint, optimización (paginación, `AsNoTracking`, OutputCache), persistencia políglota (Postgres/Mongo/Cassandra), caché con Redis, WebSocket, GraphQL, Mail, Identity, seguridad (CORS, rate limiting, auditoría), todo con Docker, y tests con Bruno. Identity queda aparcado (ambiguo, pendiente de confirmar con Jesús/profesor qué significa exactamente). El resto, confirmado como obligatorio por Cristian.
+
+**Qué se hizo (Bloque 1 — Optimización y seguridad):** antes de tocar nada se investigó en paralelo (6 sub-tareas) el código real de José Luis para cada bloque, para no inventar ningún patrón — regla de oro del proyecto. Para este bloque:
+1. **Paginación:** `PagedResponse<T>`/`PageMetadata` (DTOs compartidos), `GetPagedAsync` en los tres repositorios (`Skip`/`Take`/`CountAsync`, `AsNoTracking`) y los tres servicios (clamps `page≥1`, `pageSize∈[1,100]`, igual que hace José Luis), endpoint `GET /api/{recurso}/paged?page=&pageSize=`.
+2. **OutputCache:** middleware nativo de ASP.NET Core (`AddOutputCache`/`UseOutputCache`), `[OutputCache(Duration=60, Tags=[...])]` en los `GET` públicos, invalidado con `IOutputCacheStore.EvictByTagAsync` tras cada escritura en los tres servicios (inyectado por constructor).
+3. **CORS:** política `AllowAll` en `Program.cs` (documentado como solo válida en desarrollo, siguiendo el aviso explícito del material de José Luis).
+4. **Rate limiting:** API nativa `System.Threading.RateLimiting` (nunca el paquete de terceros, también por indicación explícita del material), `FixedWindowRateLimiter` de 100 peticiones/minuto por IP, 429 + `Retry-After` al superarlo.
+5. **Auditoría de accesos:** `JwtBearerEvents.OnAuthenticationFailed` registra con `LogWarning` cada intento de acceso con token ausente/caducado/manipulado.
+6. **Swagger + XMLDoc:** `GenerateDocumentationFile` en el csproj, `Swashbuckle.AspNetCore.Annotations`, XMLDoc (`summary`/`param`/`response`) y `[SwaggerOperation]`/`[SwaggerResponse]` en los cuatro controladores (Funko, Categoria, Proveedor, Auth).
+
+**Verificado en vivo** (no solo "compila"): 82/82 tests en verde; con `curl`, confirmado que la caché se invalida al momento (crear un Funko aparece en el siguiente `GET` sin esperar), que CORS responde con los headers correctos en un preflight, y que el rate limiter corta en 429 al superar el límite (ráfaga de 110 peticiones → 87 pasan, 23 bloqueadas).
+
+**Decisión tomada:** seguir al pie de la letra el código real de las soluciones de José Luis (`soluciones/21-ProductosOptimization`, `soluciones/22-ProductosComplete`, `24-documentacion.md`), no la teoría genérica de los `.md` cuando difiere del código (p. ej. el tipo de paginación se llama `PagedResponse<T>` en su código, aunque el `.md` lo llama `PagedResult<T>`).
+
+**Alternativas descartadas:** ninguna — todo lo de este bloque coincide exactamente con el patrón de José Luis, sin margen de interpretación propia.
+
+**Qué queda pendiente:** Bloques 2-8 (Redis, Mail, WebSocket, GraphQL, Mongo, Bruno), más el checklist final y la presentación en tres niveles.
+
+## Entrada 16. Bloque 2: caché de aplicación con Redis
+
+**Qué se hizo:** `ICacheService` (Get/Set/Remove/Exists/GetOrSet genéricos) con dos implementaciones — `MemoryCacheService` en Development (sin Docker), `RedisCacheService` en Production — exactamente el mismo patrón Dev/Prod que ya usa `DatabaseConfig` para SQLite/PostgreSQL. `GetOrSetAsync` usa un semáforo por clave para evitar cache stampede. Aplicado a `ServiceFunko` (el candidato obvio, más lecturas): `GetAllAsync`/`GetByIdAsync` pasan por la caché, y todas las escrituras invalidan tanto esta caché de aplicación como el OutputCache HTTP del Bloque 1 (un único método privado `InvalidarCacheAsync`). Redis añadido a `compose.yaml` (imagen `redis:7-alpine`, con contraseña, healthcheck).
+
+**Verificado en vivo, con Redis real en Docker** (no solo con el `MemoryCacheService` de desarrollo): `docker compose up`, creado un Funko, comprobado con `redis-cli KEYS "*"` que la clave `funko:1` existe de verdad dentro del contenedor Redis, actualizado el precio y confirmado que la clave desaparece (invalidación real) y se repuebla con el valor correcto en la siguiente lectura.
+
+**Decisión tomada:** solo `ServiceFunko` usa esta caché por ahora, no Categoria/Proveedor — para no dispersar el tiempo disponible; el patrón es el mismo si se quisiera extender luego.
+
+**Alternativas descartadas:** decorar el repositorio con Scrutor en vez de inyectar la caché directamente en el servicio. El propio reto de José Luis lo marca como "puntos extra", no como el camino principal — se sigue el camino principal.
+
+**Qué queda pendiente:** Bloques 3-8 (Mail, WebSocket, GraphQL, Mongo, Bruno), checklist final, presentación en tres niveles. Puerto de PostgreSQL en `compose.yaml` cambiado de 5433 a 5434 porque 5433 lo ocupaba otro proyecto (`beautylab-postgres`) en esta máquina — no es un cambio de diseño, es evitar un conflicto de puertos local.
+
+## Entrada 17. Bloque 3: notificaciones por email
+
+**Qué se hizo:** `IEmailService`/`MemoryEmailService` (deja constancia en el log, no envía nada de verdad) + `EmailTemplates` (HTML inline), siguiendo el código real de `soluciones/19-ProductosEmail` (no la versión más elaborada del `.md`, que incluye adjuntos/plantillas Razor/cola con `BackgroundService` — el código real de José Luis es mucho más simple: solo `MemoryEmailService` en los dos entornos, sin servidor SMTP). Disparo fire-and-forget (`_ = ...`) en `ServiceFunko.AddAsync`/`DeleteAsync`, con try/catch interno para que un fallo de email nunca tumbe la petición.
+
+**Verificado en vivo:** creado y borrado un Funko, confirmado en el log el `=== EMAIL SENT ===` con destinatario, asunto y el nombre real del Funko en los dos casos.
+
+**Decisión tomada:** no se activa MailKit/SMTP real (ni en Production). El propio código de referencia de José Luis lo deja comentado/pendiente en su solución — replicar exactamente eso, no inventar un servidor SMTP que él no activa.
+
+**Alternativas descartadas:** cola de emails con `BackgroundService`/`IServiceScopeFactory` (versión "completa" del `.md`). Descartada: el código real que de verdad compila y pasa sus tests usa fire-and-forget simple, que es lo que se sigue aquí.
+
+**Qué queda pendiente:** Bloques 5-8 (WebSocket, GraphQL, Mongo, Bruno), checklist final, presentación en tres niveles.
+
+## Entrada 18. Bloque 5: WebSocket en tiempo real con SignalR
+
+**Qué se hizo:** `FunkosHub` (SignalR, no WebSocket nativo — el propio material de José Luis dice "si no sabes cuál elegir, usa SignalR"), con el patrón exacto de `soluciones/16-ProductosRealTime`: grupo `admins` al conectar si el usuario tiene ese rol, `JoinCategoriaGroup`/`LeaveCategoriaGroup`, `Ping`/`Pong`. `ServiceFunko` notifica al grupo `admins` (`FunkoCreado`/`FunkoActualizado`/`FunkoEliminado`) tras cada escritura, fire-and-forget con try/catch, igual que el email. Corregido un hueco real entre la teoría y el código de José Luis: el `.md` dice que `OnMessageReceived` (JWT por query string) es "imprescindible" para que el Hub autentique, pero no está en el código de su solución — añadido a mano siguiendo el `.md`. También corregido el CORS del Bloque 1: `AllowAnyOrigin()` es incompatible con `AllowCredentials()` (que SignalR necesita), cambiado a `SetIsOriginAllowed(_ => true)`.
+
+**Verificado en vivo de verdad, no simulado:** escrito un cliente SignalR real en Node.js (paquete oficial `@microsoft/signalr`), conectado con el JWT por query string, suscrito al evento `FunkoCreado`; al crear un Funko por REST en paralelo, el cliente recibió la notificación con el payload exacto en menos de un segundo.
+
+**Decisión tomada:** solo se notifica al grupo `admins`, no por categoría. El reto de José Luis habla de notificar "al propietario" de un Funko, pero nuestro dominio no tiene ese concepto (a diferencia de `Producto.UsuarioId` en su ejemplo) — y el `CategoriaId` real tampoco llega hasta el `FunkoDto`/modelo de dominio (la Categoria se aplana a texto, decisión ya tomada en la Entrada 3). Extender esto exigiría cambiar el modelo de dominio de Funko, que es justo lo que está en juego sin resolver para el Bloque 6 (GraphQL) — se decide no tocarlo aquí.
+
+**Alternativas descartadas:** WebSocket nativo (`app.UseWebSockets()`) en vez de SignalR. Descartado: el material lo marca como "solo informativo", SignalR es el camino recomendado y tiene reconexión automática, grupos y mejor soporte de cliente.
+
+**Qué queda pendiente:** Bloques 6-8 (GraphQL, Mongo, Bruno), checklist final, presentación en tres niveles.
+
+## Entrada 19. Bloque 6: GraphQL con HotChocolate
+
+**Qué se hizo:** `FunkosQuery` (funkos, funko(id), categorias), `FunkoMutation` (crearFunko/actualizarFunko con `[Authorize]`, eliminarFunko con `[Authorize(Roles: Admin)]`) y `FunkoSubscription` (funkoCreado/funkoActualizado/funkoEliminado, publicadas con `ITopicEventSender` desde la Mutation), con HotChocolate 16.6.6 — mismos paquetes y mismo patrón de registro (`AddGraphQLServer().AddQueryType<T>()...`) que `soluciones/17-ProductosGraphQL`. GraphQL convive con los controladores REST en `/graphql`, sin sustituirlos.
+
+**Decisión tomada — adaptación deliberada, no un descuido:** José Luis resuelve la relación Funko→Categoria con un `CategoriaByIdDataLoader` sobre la entidad de EF Core (evita N+1 queries). Aquí no hace falta: nuestro `FunkoDto` ya llega con la Categoria resuelta como texto desde el propio `ServiceFunko`/`RepositoryFunko` (decisión de la Entrada 3), así que Query y Mutation reutilizan directamente `IServiceFunko`/`IServiceCategoria` — los mismos servicios que usa la API REST, con su mismo `Result<T,DomainError>` — en vez de tocar la entidad o montar un DataLoader que no resolvería ningún problema real aquí. Se evita además un hueco que detecté en la investigación: el `CategoriaByIdDataLoader` de referencia pide `IDbContextFactory<AppDbContext>`, que la app real de José Luis nunca registra (solo su proyecto de tests) — no se arrastra ese problema.
+
+**Verificado en vivo con `curl` contra `/graphql`:** query `funkos`/`funko(id)`/`categorias`, mutation `crearFunko` (con y sin token — sin token devuelve `AUTH_NOT_AUTHENTICATED`, con token crea de verdad y aparece en la siguiente query), mutation `eliminarFunko` con rol Admin (refleja el borrado lógico al momento). Las subscriptions están cableadas con el mismo mecanismo (`ITopicEventSender`/`[Subscribe][Topic]`) que ya se demostró en vivo con SignalR en la Entrada 18, pero no se ha probado con un cliente GraphQL-WS por falta de tiempo — queda declarado como pendiente, no como "hecho y probado".
+
+**Alternativas descartadas:** ninguna de fondo — la única desviación real (sin DataLoader) está justificada arriba, no es una desviación arbitraria.
+
+**Qué queda pendiente:** probar las subscriptions GraphQL con un cliente real (como se hizo con SignalR). Bloque 7 (Mongo), Bloque 8 (Bruno), checklist final, presentación en tres niveles.
+
+## Entrada 20. Bloque 7: MongoDB como motor alternativo para Categoria
+
+**Qué se hizo:** `RepositoryCategoriaMongo` implementa la misma interfaz `IRepositoryCategoria` que ya usa EF Core — el servicio y el controlador no cambian ni una línea. Selección por configuración: `DatabaseSettings:CategoriaProvider` = `"EFCore"` (por defecto) o `"Mongo"`, resuelto en `RepositoriesConfig.AddRepositories`. Documento con `[BsonId] ObjectId` propio de Mongo más un `Id` numérico (`long`) para no romper DTOs/rutas (`{id:long}`) ni el resto de la aplicación, generado con un contador atómico (`FindOneAndUpdate $inc` sobre una colección `contadores`) porque Mongo no tiene autoincremento nativo. Mongo añadido a `compose.yaml` (imagen `mongo:7.0`, healthcheck), con el proveedor también parametrizado vía variable de entorno (`DATABASESETTINGS__CATEGORIAPROVIDER`).
+
+**Decisión tomada — desviación consciente del reto de José Luis:** su material trata Mongo como una solución nueva y separada (`ProductosMongo.slnx` propio), con Categoria embebida dentro del documento Funko y Proveedor referenciado. Con el plazo del jueves, montar un segundo proyecto completo no compensa frente a demostrar la integración real dentro de la API que ya existe, reutilizando el mismo patrón Dev/Prod que ya usamos para SQLite/PostgreSQL y Redis. Se declara explícitamente como adaptación, no como el camino "oficial" del material.
+
+**Verificado en vivo con MongoDB real en Docker** (no solo compilado): forzado `CategoriaProvider=Mongo`, creada una Categoria por la API REST, confirmado con `mongosh` que el documento existe de verdad dentro de Mongo (`id: Long('1')`, generado por el contador). Probados también duplicado (409), actualización (200), borrado lógico (204, desaparece del listado) — y confirmado que Funko sigue funcionando sin problema contra PostgreSQL al mismo tiempo (coexistencia real de dos motores).
+
+**Alternativas descartadas:** Cassandra (Entrada de investigación previa): descartada por Cristian desde el principio por su coste mucho mayor (rediseño del acceso a datos tabla-por-consulta). Proyecto Mongo separado siguiendo el reto al pie de la letra: descartado por tiempo, ver arriba.
+
+**Qué queda pendiente:** Bloque 8 (Bruno), checklist final, presentación en tres niveles.
+
+## Entrada 21. Bloque 8: colección Bruno
+
+**Qué se hizo:** colección Bruno en `FunkoAppi01/Bruno/FunkoApp/` (la carpeta ya estaba reservada en el `.csproj` desde el primer commit de Jesús — resuelto el misterio de la Entrada anterior sobre por qué aparecía en Rider), con el mismo formato `.yml` del repositorio de José Luis (`opencollection.yml`, `environments/Local.yml` con la variable `url`, una petición por fichero). Cubre Auth (Login, Signup, Me), Funko (GetAll, GetById, GetPaged, Search, Create, Update, Delete), Categoria (GetAll, Create, Delete) y Proveedor (GetAll, Create) — no cada endpoint de cada recurso, pero sí una muestra representativa del CRUD completo en los tres.
+
+**Decisión tomada:** autenticación explícita por variable (`{{token}}`, se pega a mano tras ejecutar Login) en vez de scripts de captura automática. El ejemplo de referencia de José Luis tampoco demuestra esa automatización (su `Me.yml` lleva un token pegado a mano, no capturado por script), así que no se inventa una mecánica que no está documentada en ningún sitio.
+
+**Alternativas descartadas:** ninguna.
+
+**Qué queda pendiente:** checklist final de requisitos y presentación en tres niveles — los dos últimos pendientes de este bloque de trabajo.
+
+## Entrada 22. Revisión del trabajo de Jesús y cierre de un pendiente (Proveedor en Funko)
+
+**Qué se hizo:** se revisó `upstream/main` de Jesús (había fusionado su propia rama con PR #2: su propio CRUD de Categoria, Proveedor con MongoDB, su propia interfaz de caché, y un `Query.cs` de GraphQL inicial). Comparado a fondo con lo que ya teníamos en `dev`, antes de decidir si fusionar.
+
+**Decisión tomada: no se fusiona nada en bloque.** Es una reimplementación paralela e independiente de lo mismo que ya tenemos (y más completa de nuestro lado: nuestro GraphQL tiene Mutation y Subscription, su `Query.cs` nada más; nuestro Redis está probado en vivo, el suyo (`IServiceCache`) tiene incluso un typo en un nombre de método; él puso Mongo en Proveedor, nosotros en Categoria — misma idea, sin que una sea mejor que la otra). Fusionar habría significado resolver conflictos en casi todos los ficheros de Categoria/Proveedor/GraphQL/Cache para acabar quedándonos con la nuestra de todas formas.
+
+**Lo único que sí se salvó:** la idea de exponer `Proveedor` como campo del Funko — que coincidía exactamente con un pendiente que ya teníamos anotado nosotros mismos (Entrada 13: "Proveedor en Funko es una relación opcional todavía no expuesta en los DTOs"). Implementado a nuestra manera, no copiando su código (el suyo tenía un bug real: `ProveedorEntity Proveedor { get; set; } = null;` sin el operador `!`, en una propiedad no anulable, y lo hacía obligatorio en vez de opcional).
+
+**Qué se hizo exactamente:**
+- `Models.Funko.Proveedor` (`string?`, opcional).
+- `CreateFunkoDto`/`UpdateFunkoDto`: parámetro `Proveedor` opcional al final (`= null`), para no romper ningún test existente que ya construye estos DTOs sin él.
+- `FunkoDto.Proveedor` en la respuesta.
+- `RepositoryFunko`: mismo patrón "obtener o crear por nombre" que ya existía para Categoria (`ObtenerOCrearProveedor`), pero sin crear nada si no viene informado.
+- `FunkoValidator`: si se informa un Proveedor, no puede ser solo espacios (igual regla que Categoria).
+
+**Verificado en vivo:** creado un Funko sin proveedor (funciona, campo `null`), creado otro con proveedor nuevo ("Funko Inc") — se crea automáticamente y aparece correctamente en `GET /api/Proveedor`. 82/82 tests en verde, sin tocar ninguno existente.
+
+**Alternativas descartadas:** copiar literalmente el código de Jesús. Descartado por el bug de nulabilidad y porque lo hacía obligatorio, contradiciendo nuestra propia decisión ya tomada de que fuera opcional.
+
+**Qué queda pendiente:** checklist final y presentación — ya cerrados en `EXPOSICION.md`, solo falta actualizar ese documento para reflejar que el pendiente de "Proveedor en Funko" ya está resuelto.
+
+## Entrada 23. Cierre final antes de la exposición
+
+**Qué se hizo:** antes de dar el proyecto por terminado, se cerró el único hueco de verificación que quedaba abierto desde la Entrada 19: las subscriptions de GraphQL nunca se habían probado con un cliente real. Se escribió un cliente con `graphql-ws` (Node.js) que se suscribe a `funkoCreado` y dispara la mutación `crearFunko` en paralelo.
+
+**Bug real encontrado y corregido:** la primera prueba falló — la conexión WebSocket nunca completaba el *handshake* (`Unexpected server response: 200/301`). Faltaba `app.UseWebSockets()` en el pipeline; sin esa línea, **las subscriptions no funcionaban en absoluto**, pese a que todo compilaba y las queries/mutations normales (HTTP) sí iban bien. Añadida la línea en `GraphQLConfig.MapGraphQLEndpoints`, repetida la prueba: `EVENTO RECIBIDO funkoCreado: {...}` — funciona de verdad. 82/82 tests siguen en verde.
+
+**Por qué importa:** esto confirma la norma de verificación en tres capas del proyecto — "compila" y "pasan los tests" no habían detectado este fallo, porque ningún test automatizado abre una conexión WebSocket real. Solo probarlo con un cliente de verdad lo sacó a la luz, justo a tiempo para la exposición.
+
+**Qué queda pendiente:** nada bloqueante. El proyecto se considera cerrado para la entrega de mañana.
+
+## Entrada 24. Cobertura de tests real, comparando con `RepositorioRemoto`
+
+**Qué se hizo:** Cristian pidió revisar `RepositorioRemoto` (la primera entrega que salió bien) para ver si teníamos el mismo nivel de documentación — en concreto, preguntó por casos de uso y cobertura de tests.
+
+- **Casos de uso:** revisado el README de `RepositorioRemoto` a fondo — no tiene ninguna sección de casos de uso. Por la regla de oro (seguir su estilo, no inventar), no se añade: no es parte del patrón del profesor.
+- **Cobertura de tests:** hueco real. Teníamos `coverlet.collector` como dependencia pero nunca se había generado el informe. Generado con las mismas herramientas exactas que usa `RepositorioRemoto` (`coverlet.runsettings` + `dotnet test --collect:"XPlat Code Coverage"` + `reportgenerator`, informe HTML en `docs/coverage/`, igual que él). Resultado inicial: **45.5%** — mucho más bajo que su 87.1%, y se sabía exactamente por qué: `CategoriaController`/`ProveedorController` y sus repositorios estaban al 0%, sin ningún test (pendiente ya anotado en la Entrada 13).
+
+**Cerrado el hueco más grande:** añadidos `RepositoryCategoriaTests`/`RepositoryProveedorTests` (SQLite real en memoria, mismo patrón que `RepositoryFunkoTests`) y `CategoriaControllerIntegrationTests`/`ProveedorControllerIntegrationTests` (`WebApplicationFactory`, mismo patrón que `FunkoControllerIntegrationTests`, verificando además que la escritura exige rol Admin en los dos, no solo estar autenticado). 31 tests nuevos, **113 en total**, cobertura subida a **53.8%**.
+
+**Decisión tomada:** no perseguir el 87% de `RepositorioRemoto` a toda costa. Lo que queda sin cubrir (GraphQL, SignalR, el repositorio Mongo) son los bloques añadidos en los extras, verificados en vivo con clientes reales (`curl`, un cliente SignalR, uno de subscriptions GraphQL, `mongosh`) — una verificación distinta pero igual de real que un test automático, y escribir tests para HotChocolate/SignalR desde cero no compensaba el tiempo disponible a horas de la exposición.
+
+**Verificado:** 113/113 tests en verde, build limpio, informe navegable en `docs/coverage/index.html` (committeado, igual que hace `RepositorioRemoto`; la carpeta `TestResults/` con el XML crudo sí se ignora, también igual que él).
+
+**Qué queda pendiente:** nada bloqueante. Documentado también en el README (badge de cobertura, sección "Cobertura", tabla de tests actualizada, y la sección "Qué queda fuera" puesta al día tras los últimos bloques).
+
+## Entrada 25. Cobertura al 80% mínimo — no negociable
+
+**Qué se hizo:** Cristian fijó un mínimo de cobertura del 80%, sin margen de discusión. Se añadieron 60 tests nuevos (113→173): `Cache/` (Memory+Redis), `GraphQL/` (Query/Mutation/Subscription, llamando a las clases directamente con sus dependencias mockeadas, sin levantar transporte), `Hubs/` (FunkosHub, mockeando `Context`/`Groups`/`Clients`), `Middleware/` (excepciones), `Infraestructure/` (tests de humo de registro DI), más los huecos que quedaban en `RepositoryFunko` y en los tres controladores (Update/Search/GetPaged).
+
+**Hallazgo que cambió el resultado:** `Microsoft.AspNetCore.OpenApi.Generated`, una clase autogenerada por el propio SDK (soporte de comentarios XML para Swagger), tenía **603 líneas "cubribles" al 0%** — más de la cuarta parte de toda la superficie medida, sin ser código nuestro. Se excluyó en `coverlet.runsettings`, exactamente la misma lógica que `RepositorioRemoto` aplicó a su propio `Program.cs`. Solo esa corrección ya llevó la cobertura del 58.6% al 80.8%.
+
+**Resultado final: 88.5%**, con margen. El único 0% que queda es `RepositoryCategoriaMongo` (ya documentado en la Entrada 20: verificado en vivo contra Mongo real, sin test automático por el tiempo que costaría montar un Mongo de pruebas aislado) — con el margen actual, no hace falta forzarlo para cumplir el mínimo.
+
+**Decisión tomada:** excluir código generado/framework de la medición, igual que el proyecto de referencia; no inflar artificialmente con tests triviales que no prueben nada real (cada test nuevo verifica un comportamiento concreto, con Arrange/Act/Assert, no solo "que no explote").
+
+**Alternativas descartadas:** forzar cobertura en `RepositoryCategoriaMongo` con una librería de Mongo embebido (`Mongo2Go`) solo para sumar puntos porcentuales. Descartada: con 88.5% de margen no hace falta, y añadir una dependencia nueva a horas de la entrega por una métrica ya cumplida no compensa.
+
+**Qué queda pendiente:** casos de uso y diagramas (Fase 2, en curso), PDF checklist final (Fase 3), presentación (Fase 4).
+
 <!-- La siguiente entrada se añade aquí, con el mismo formato: Qué se hizo / Decisión y porqué / Alternativas descartadas / Pendiente -->
