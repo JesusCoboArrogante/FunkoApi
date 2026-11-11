@@ -2,7 +2,7 @@ namespace FunkoAppi01.Dto;
 
 public record ProveedorDto
     (
-        long Id,
+        string Id,
         string Nombre,
         long Telefono
         );

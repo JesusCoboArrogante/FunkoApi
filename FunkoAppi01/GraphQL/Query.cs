@@ -5,6 +5,7 @@ namespace FunkoAppi01.GraphQL;
 
 public class Query
 {
+    /*
     public async Task<IEnumerable<FunkoDto>> GetFunkoAsy(
         [Service] IServiceFunko service)
     {
@@ -42,5 +43,6 @@ public class Query
     {
         return await service.GetAllAsync();
     }
+    */
     
 }

@@ -12,8 +12,7 @@ public class FunkoEntity
     public int Stock { get; set; }
     public long CategoriaId { get; set; }
     public CategoriaEntity Categoria { get; set; } = null!;
-    public long ProveedorId { get; set; }
-    public ProveedorEntity Proveedor { get; set; } = null;
+    public string ProveedorId { get; set; } = string.Empty;
     public bool IsDeleted { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

@@ -17,7 +17,9 @@ public static class FunkoEntityMapper
         Precio = entity.Precio,
         Stock = entity.Stock,
         Categoria = entity.Categoria.Nombre,
+        ProveedorId = entity.ProveedorId,
         IsDeleted = entity.IsDeleted,
+        
         CreatedAt = entity.CreatedAt,
         UpdatedAt = entity.UpdatedAt
     };

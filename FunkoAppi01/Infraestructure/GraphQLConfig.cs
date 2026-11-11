@@ -5,6 +5,7 @@ namespace FunkoAppi01.Infraestructure;
 
 public static class GraphQLConfig
 {
+    /*
     public static IRequestExecutorBuilder AddGraphQLConfig(
         this IServiceCollection services,
         IWebHostEnvironment environment)
@@ -36,4 +37,5 @@ public static class GraphQLConfig
         app.MapGraphQL("/graphql");
         app.MapGraphQL();
     }
+    */
 }

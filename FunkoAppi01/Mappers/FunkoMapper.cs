@@ -34,6 +34,7 @@ public static class FunkoMapper
         funko.Precio,
         funko.Stock,
         funko.Categoria,
+        funko.ProveedorId,
         funko.CreatedAt,
         funko.UpdatedAt);
 }

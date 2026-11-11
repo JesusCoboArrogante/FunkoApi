@@ -1,4 +1,5 @@
-using FunkoAppi01.Models;
+
+using FunkoAppi01.IdGenerator;
 using Microsoft.EntityFrameworkCore;
 using MongoDB.EntityFrameworkCore.Extensions;
 
@@ -17,7 +18,16 @@ public class ProveedorMongoDbContext(DbContextOptions<ProveedorMongoDbContext> o
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<Proveedor>().ToCollection("proveedores");
-        
+        modelBuilder.Entity<ProveedorEntity>(entity =>
+            {
+                entity.ToCollection("proveedores");
+                entity.HasKey(p => p.Id);
+                entity.Property(p => p.Id)
+                    .HasValueGenerator<YoutubeIdValueGenerator>()
+                    .ValueGeneratedOnAdd();
+            }
+        );
+
+
     }
 }

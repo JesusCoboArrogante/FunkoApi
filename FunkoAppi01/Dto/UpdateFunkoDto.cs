@@ -19,7 +19,10 @@ public record UpdateFunkoDto(
 
     [Range(0, int.MaxValue, ErrorMessage = "El stock no puede ser negativo")]
     int Stock,
-
+    
     [Required(ErrorMessage = "La categoría es obligatoria")]
-    string Categoria
+    string Categoria,
+
+    [Required(ErrorMessage = "El proveedor es obligatorio")]
+    string ProveedorId
 );

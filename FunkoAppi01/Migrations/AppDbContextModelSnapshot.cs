@@ -15,7 +15,7 @@ namespace FunkoAppi01.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.0");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
 
             modelBuilder.Entity("FunkoAppi01.Entity.CategoriaEntity", b =>
                 {
@@ -63,6 +63,10 @@ namespace FunkoAppi01.Migrations
                     b.Property<decimal>("Precio")
                         .HasColumnType("decimal(10,2)")
                         .HasColumnName("precio");
+
+                    b.Property<string>("ProveedorId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Stock")
                         .HasColumnType("INTEGER")

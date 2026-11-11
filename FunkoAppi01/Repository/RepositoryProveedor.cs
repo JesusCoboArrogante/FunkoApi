@@ -15,12 +15,15 @@ public class RepositoryProveedor (ProveedorMongoDbContext context, AppDbContext 
         .Select(p => new Proveedor
             {
                 Id = p.Id,
-                Nombre = p.Nombre
+                Nombre = p.Nombre,
+                Telefono = p.Telefono
             })
         .ToListAsync();
     }
 
-    public async Task<Proveedor?> GetByIdAsync(long id)
+    
+
+    public async Task<Proveedor?> GetByIdAsync(string id)
     {
         return await context.Proveedores
             .AsNoTracking()
@@ -28,7 +31,8 @@ public class RepositoryProveedor (ProveedorMongoDbContext context, AppDbContext 
             .Select(p => new Proveedor()
             {
                 Id = p.Id,
-                Nombre = p.Nombre
+                Nombre = p.Nombre,
+                Telefono = p.Telefono
             })
             .FirstOrDefaultAsync();
     }
@@ -37,7 +41,8 @@ public class RepositoryProveedor (ProveedorMongoDbContext context, AppDbContext 
     {
         var entidad = new ProveedorEntity
         {
-            Nombre = proveedor.Nombre
+            Nombre = proveedor.Nombre,
+            Telefono = proveedor.Telefono
         };
         
         context.Proveedores.Add(entidad);
@@ -46,26 +51,29 @@ public class RepositoryProveedor (ProveedorMongoDbContext context, AppDbContext 
         return new Proveedor
         {
             Id = entidad.Id,
-            Nombre = entidad.Nombre
+            Nombre = entidad.Nombre,
+            Telefono = entidad.Telefono
         };
     }
 
-    public async Task<Proveedor?> UpdateAsync(long id, Proveedor proveedor)
+    public async Task<Proveedor?> UpdateAsync(string id, Proveedor proveedor)
     {
         var entidad = await context.Proveedores
             .FirstOrDefaultAsync(p => p.Id == id);
         if (entidad == null)
             return null;
         entidad.Nombre = proveedor.Nombre;
+        entidad.Telefono = proveedor.Telefono;
         await context.SaveChangesAsync();
         return new Proveedor
         {
             Id = entidad.Id,
-            Nombre = entidad.Nombre
+            Nombre = entidad.Nombre,
+            Telefono = entidad.Telefono
         };
     }
 
-    public async Task<bool> SoftDeleteAsync(long id)
+    public async Task<bool> SoftDeleteAsync(string id)
     {
         var entidad = await context.Proveedores
             .FirstOrDefaultAsync(p => p.Id == id);
@@ -77,20 +85,30 @@ public class RepositoryProveedor (ProveedorMongoDbContext context, AppDbContext 
         return true;
     }
 
-    public Task<IReadOnlyList<Proveedor>> GetByNameAsync(string? nombre)
+    public async Task<IReadOnlyList<Proveedor>> GetByNameAsync(string? nombre)
     {
-        throw new NotImplementedException();
+        var texto = nombre ?? string.Empty;
+
+        var proveedor = await GetAllAsync();
+
+        return proveedor
+            .Where(p => p.Nombre.Contains(
+                texto,
+                StringComparison.OrdinalIgnoreCase
+            )).ToList();
     }
 
-    public async Task<bool> ExistsByNameAsync(string nombre, long? excludeId = null)
+    
+
+    public async Task<bool> ExistsByNameAsync(string nombre, string? excludeId = null)
     {
         return await context.Proveedores.AnyAsync(p =>
-            (!excludeId.HasValue || p.Id != excludeId.Value) &&
+            (excludeId == null || p.Id != excludeId) &&
             p.Nombre.ToLower() == nombre.ToLower()
         );
     }
 
-    public async Task<bool> HasFunkoAsync(long id)
+    public async Task<bool> HasFunkoAsync(string id)
     {
         return await sqlContext.Funkos
             .IgnoreQueryFilters()

@@ -6,8 +6,8 @@ using FunkoAppi01.Dto;
 public interface IServiceProveedor
 {
     Task <IEnumerable<ProveedorDto>> GetAllAsync();
-    Task<Result<ProveedorDto, DomainError>> GetByIdAsync(long id);
+    Task<Result<ProveedorDto, DomainError>> GetByIdAsync(string id);
     Task<Result<ProveedorDto,DomainError>> AddAsync(CreateProveedorDto request);
-    Task<Result<ProveedorDto, DomainError>> UpdateAsync(long id, UpdateProveedorDto request);
-    Task<Result<bool, DomainError>> DeleteAsync(long id);
+    Task<Result<ProveedorDto, DomainError>> UpdateAsync(string id, UpdateProveedorDto request);
+    Task<Result<bool, DomainError>> DeleteAsync(string id);
 }

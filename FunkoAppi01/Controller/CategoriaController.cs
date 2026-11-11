@@ -20,7 +20,7 @@ public class CategoriaController(IServiceCategoria service): ControllerBase
     
     [AllowAnonymous]
     [HttpGet("{id:long}")]
-    public async Task<ActionResult<CategoriaDto>> GetById(long id) => Ok(await service.GetByIdAsync(id));
+    public async Task<ActionResult<CategoriaDto>> GetById(long id) => ToActionResult(await service.GetByIdAsync(id));
 
     [HttpPost]
     [Authorize(Roles = UserRoles.Admin)]
@@ -69,6 +69,14 @@ public class CategoriaController(IServiceCategoria service): ControllerBase
                 Title = "Solicitud inválida",
                 Detail = validacion.Message
             }),
+            
+            DomainError.Conflict conflict => Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Conflicto",
+                Detail = conflict.Message
+            }),
+            
             _ => StatusCode(StatusCodes.Status500InternalServerError)
         };
     }

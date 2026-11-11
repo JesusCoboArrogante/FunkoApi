@@ -20,7 +20,7 @@ public class ServiceProveedor (
 
     }
 
-    public async Task<Result<ProveedorDto, DomainError>> GetByIdAsync(long id)
+    public async Task<Result<ProveedorDto, DomainError>> GetByIdAsync(string id)
     {
         var proveedor = await repository.GetByIdAsync(id);
         if (proveedor == null)
@@ -65,7 +65,7 @@ public class ServiceProveedor (
         return Result.Success<ProveedorDto, DomainError>(creada.ToDto());
     }
 
-    public async Task<Result<ProveedorDto, DomainError>> UpdateAsync(long id, UpdateProveedorDto request)
+    public async Task<Result<ProveedorDto, DomainError>> UpdateAsync(string id, UpdateProveedorDto request)
     {
         var validacion = validator.ValidateUpdate(request);
         if (validacion.IsFailure)
@@ -110,7 +110,7 @@ public class ServiceProveedor (
         return  Result.Success<ProveedorDto, DomainError>(actualizada.ToDto());
     }
 
-    public async Task<Result<bool, DomainError>> DeleteAsync(long id)
+    public async Task<Result<bool, DomainError>> DeleteAsync(string id)
     {
         var proveedor = await repository.GetByIdAsync(id);
         if (proveedor is null)

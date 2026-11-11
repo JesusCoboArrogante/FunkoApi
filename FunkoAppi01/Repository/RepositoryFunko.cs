@@ -40,6 +40,7 @@ public class RepositoryFunko(AppDbContext context) : IRepositoryFunko
             Stock = funko.Stock,
             CategoriaId = categoria.Id,
             Categoria = categoria,
+            ProveedorId = funko.ProveedorId,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -62,6 +63,7 @@ public class RepositoryFunko(AppDbContext context) : IRepositoryFunko
         entidad.Stock = funko.Stock;
         entidad.CategoriaId = categoria.Id;
         entidad.Categoria = categoria;
+        entidad.ProveedorId = funko.ProveedorId;
         entidad.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();

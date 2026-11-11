@@ -21,5 +21,10 @@ public record CreateFunkoDto(
     int Stock,
 
     [Required(ErrorMessage = "La categoría es obligatoria")]
-    string Categoria
+    string Categoria,
+    
+
+
+[Required(ErrorMessage = "El proveedor es obligatorio")]
+string ProveedorId
 );

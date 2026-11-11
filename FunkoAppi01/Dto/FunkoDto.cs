@@ -16,6 +16,7 @@ public record FunkoDto(
     decimal Precio,
     int Stock,
     string Categoria,
+    string  ProveedorId,
     DateTime CreatedAt,
     DateTime? UpdatedAt
 );

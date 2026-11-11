@@ -14,7 +14,8 @@ namespace FunkoAppi01.Service;
 public class ServiceFunko(
     IRepositoryFunko repository,
     IFunkoValidator validator,
-    ILogger<ServiceFunko> logger) : IServiceFunko
+    ILogger<ServiceFunko> logger,
+    IRepositoryProveedor repositoryProveedor) : IServiceFunko
 {
     public async Task<IEnumerable<FunkoDto>> GetAllAsync() =>
         (await repository.GetAllAsync()).Select(f => f.ToDto());
@@ -33,6 +34,21 @@ public class ServiceFunko(
         if (validacion.IsFailure)
             return Result.Failure<FunkoDto, DomainError>(validacion.Error);
 
+        if (string.IsNullOrWhiteSpace(request.ProveedorId))
+        {
+            return Result.Failure<FunkoDto, DomainError>(
+                FunkoErrors.Validation(["El proveedor es obligatorio"])
+                );
+        }
+        
+        var proveedor = await repositoryProveedor.GetByIdAsync(request.ProveedorId);
+
+        if (proveedor is null)
+        {
+            return Result.Failure<FunkoDto, DomainError>(
+                new DomainError.NotFound(request.ProveedorId, "Proveedor"));
+        }
+
         if (await repository.ExistsByNameAsync(request.Nombre))
         {
             logger.LogWarning("Intento de crear un Funko con nombre duplicado: {Nombre}", request.Nombre);
@@ -49,6 +65,21 @@ public class ServiceFunko(
         var validacion = validator.ValidateUpdate(request);
         if (validacion.IsFailure)
             return Result.Failure<FunkoDto, DomainError>(validacion.Error);
+        
+        if (string.IsNullOrWhiteSpace(request.ProveedorId))
+        {
+            return Result.Failure<FunkoDto, DomainError>(
+                FunkoErrors.Validation(["El proveedor es obligatorio"])
+            );
+        }
+        
+        var proveedor = await repositoryProveedor.GetByIdAsync(request.ProveedorId);
+
+        if (proveedor is null)
+        {
+            return Result.Failure<FunkoDto, DomainError>(
+                new DomainError.NotFound(request.ProveedorId, "Proveedor"));
+        }
 
         if (await repository.ExistsByNameAsync(request.Nombre, id))
             return Result.Failure<FunkoDto, DomainError>(FunkoErrors.AlreadyExists(request.Nombre));

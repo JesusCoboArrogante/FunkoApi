@@ -10,7 +10,13 @@ public abstract record DomainError(string Message)
     /// <param name="Id">Identificador buscado.</param>
     /// <param name="Entidad">Tipo de entidad.</param>
     public sealed record NotFound(long Id, string Entidad = "Funko")
-        : DomainError($"No se ha encontrado ningún registro de {Entidad} con el identificador: {Id}");
+        : DomainError($"No se ha encontrado ningún registro de {Entidad} con el identificador: {Id}")
+    {
+        public NotFound(string id, string entidad) : this(0, entidad)
+        {
+            Message = $"No se ha encontrado ningun registro {entidad} con el identificador: {id}";
+        }
+    }
 
     /// <summary>Los datos no cumplen con el validador.</summary>
     /// <param name="Errors">Lista de errores detectados.</param>
